@@ -309,3 +309,4 @@ mod tests {
         assert!(report.kernel_ms.is_finite() && report.kernel_ms >= 0.0);
     }
 }
+#[cfg(test)] mod bw_probe_test;
