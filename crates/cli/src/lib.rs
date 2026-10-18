@@ -346,7 +346,7 @@ fn chat_loop(
     input: &mut impl std::io::BufRead,
     output: &mut impl std::io::Write,
 ) -> Result<(), String> {
-    writeln!(output,"Chat prêt. /reset : nouvel historique ; /tokens : budget ; /quit : quitter ; /help : aide.\nContexte : 512 tokens, sans troncature automatique. Réponses : {} tokens maximum.",session.max_new_tokens()).map_err(|e|e.to_string())?;
+    writeln!(output,"Chat prêt. /reset : nouvel historique ; /tokens : budget ; /quit : quitter ; /help : aide.\nContexte : {} tokens, sans troncature automatique. Réponses : {} tokens maximum.",adaforge_application::CHAT_CONTEXT,session.max_new_tokens()).map_err(|e|e.to_string())?;
     loop {
         write!(output, "Vous > ").map_err(|e| e.to_string())?;
         output.flush().map_err(|e| e.to_string())?;

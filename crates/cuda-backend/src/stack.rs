@@ -11,6 +11,9 @@ use cudarc::{
 };
 use std::sync::Arc;
 
+/// Longest supported context. Attention keeps one f32 score per visible
+/// token in shared memory: 10240 * 4 bytes = 40 KiB, under the 48 KiB default.
+pub(crate) const MAX_CONTEXT: u32 = 10240;
 // Diagnostic-only profiler windows: skip the benchmark warmup by default.
 static PROFILE_GENERATIONS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
@@ -54,7 +57,7 @@ struct ResidentLayer {
 fn validate(w: &LayerWeights<'_>, width: u32, tokens: u32) -> Result<(), DiagnosticError> {
     let hw = w.rope.width();
     if tokens == 0
-        || tokens > 512
+        || tokens > MAX_CONTEXT
         || tokens > w.rope.context()
         || w.input_norm.weights().len() != width as usize
         || w.matrices.iter().any(|m| m.columns() != width)
@@ -730,10 +733,10 @@ pub(crate) fn open_session(
     head: adaforge_application::OutputHead<'_>,
     capacity: u32,
 ) -> Result<Box<dyn adaforge_application::GenerationSession>, DiagnosticError> {
-    if weights.len() != 48 || capacity == 0 || capacity > 512 {
-        return Err(DiagnosticError(
-            "Session limitée à 48 blocs et 512 tokens de contexte".into(),
-        ));
+    if weights.len() != 48 || capacity == 0 || capacity > MAX_CONTEXT {
+        return Err(DiagnosticError(format!(
+            "Session limitée à 48 blocs et {MAX_CONTEXT} tokens de contexte"
+        )));
     }
     let vocabulary = head.matrix.rows();
     let width = head.matrix.columns();

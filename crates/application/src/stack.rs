@@ -382,7 +382,7 @@ impl ChatSession {
         let mut prompt = self.history.clone();
         prompt.extend_from_slice(if prompt.is_empty() { &turn } else { &turn[1..] });
         if prompt.len() + self.max_new as usize > self.capacity as usize {
-            return Err(DiagnosticError("Contexte de 512 tokens dépassé ; utiliser /reset ou un message plus court. Aucun historique tronqué.".into()));
+            return Err(DiagnosticError(format!("Contexte de {} tokens dépassé ; utiliser /reset ou un message plus court. Aucun historique tronqué.", self.capacity)));
         }
         let mut streamed = Vec::new();
         let mut emitted = 0;
@@ -478,7 +478,7 @@ pub fn open_chat(
             matrix: &model.matrix,
             cap: model.cap,
         },
-        512,
+        CHAT_CONTEXT,
     )?;
     Ok(ChatSession {
         tokenizer,
@@ -486,9 +486,11 @@ pub fn open_chat(
         history: Vec::new(),
         stop: model.stop,
         max_new,
-        capacity: 512,
+        capacity: CHAT_CONTEXT,
     })
 }
+/// Chat context window in tokens (prompt history + answer).
+pub const CHAT_CONTEXT: u32 = 10240;
 
 #[cfg(test)]
 mod chat_tests {

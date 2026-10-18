@@ -1112,4 +1112,4 @@ pub trait GenerationSession {
     ) -> Result<GenerationTokens, DiagnosticError>;
     fn reset(&mut self) -> Result<(), DiagnosticError>;
 }
-pub use stack::{ChatSession, open_chat};
+pub use stack::{CHAT_CONTEXT, ChatSession, open_chat};

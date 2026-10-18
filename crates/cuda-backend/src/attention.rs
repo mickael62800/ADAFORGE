@@ -73,7 +73,7 @@ impl AttentionKernel {
             layout,
         } = cache.resident()?;
         let c = self.config;
-        if tokens > 4096
+        if tokens > super::stack::MAX_CONTEXT
             || layout.heads() != c.kv_heads()
             || layout.width() != c.width()
             || query.len() != c.q_heads() as usize * c.width() as usize
@@ -81,8 +81,7 @@ impl AttentionKernel {
             || keys.context() != self.stream.context()
         {
             return Err(DiagnosticError(
-                "Dimensions/contexte attention incompatibles ou limite de 4096 tokens dépassée"
-                    .into(),
+                format!("Dimensions/contexte attention incompatibles ou limite de {} tokens dépassée", super::stack::MAX_CONTEXT),
             ));
         }
         let range = c.visible_range(tokens, position).map_err(DiagnosticError)?;
