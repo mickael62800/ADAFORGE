@@ -7,7 +7,9 @@ use cudarc::driver::{CudaFunction, CudaSlice, CudaStream, LaunchConfig, PushKern
 use cudarc::nvrtc::{CompileOptions, compile_ptx_with_opts};
 use std::sync::Arc;
 
-pub(crate) const MAX_BATCH: usize = 8;
+pub(crate) const MAX_BATCH: usize = 16;
+/// Longest speculative verification batch (the batched head stops at 8).
+pub(crate) const MAX_VERIFY: usize = 8;
 
 pub(crate) struct BatchKernels {
     stream: Arc<CudaStream>,

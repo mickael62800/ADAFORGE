@@ -539,7 +539,7 @@ mod tests {
                 bytes.extend((0..16).map(|_| next() as u8));
             }
             let matrix = Q4Matrix::new(columns, rows, bytes).unwrap();
-            let x: Vec<f32> = (0..columns * 8).map(|_| (next() % 65536) as f32 / 32768.0 - 1.0).collect();
+            let x: Vec<f32> = (0..columns * 16).map(|_| (next() % 65536) as f32 / 32768.0 - 1.0).collect();
             let copies = (320usize << 20).div_ceil(matrix.bytes().len()).clamp(1, 64);
             let weights: Vec<_> = (0..copies).map(|_| stream.clone_htod(matrix.bytes()).unwrap()).collect();
             // Batched kernels read x permuted by group (see q4_permute_x).
@@ -557,7 +557,7 @@ mod tests {
                 let fs = module.load_function(single).unwrap();
                 // Reference: single-token kernel, token by token.
                 let mut expected = Vec::new();
-                for t in 0..8usize {
+                for t in 0..16usize {
                     let xt = stream.clone_htod(&x[t * columns as usize..(t + 1) * columns as usize]).unwrap();
                     let mut y = stream.alloc_zeros::<f32>(rows as usize).unwrap();
                     let mut l = stream.launch_builder(&fs);
@@ -566,9 +566,9 @@ mod tests {
                     unsafe { l.launch(cfg) }.unwrap();
                     expected.extend(stream.clone_dtoh(&y).unwrap());
                 }
-                let mut y = stream.alloc_zeros::<f32>(rows as usize * 8).unwrap();
+                let mut y = stream.alloc_zeros::<f32>(rows as usize * 16).unwrap();
                 let mut report = String::new();
-                for n in 1u32..=8 {
+                for n in [1u32, 2, 4, 8, 12, 16] {
                     let fb = module.load_function(&format!("{batch}{n}")).unwrap();
                     let mut samples = Vec::new();
                     for rep in 0..4 {

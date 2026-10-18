@@ -11,10 +11,16 @@ template<int B> __device__ __forceinline__ void q4_batch_row(const unsigned char
     float s0[B],s1[B],s2[B],s3[B];
     #pragma unroll
     for(int t=0;t<B;++t){s0[t]=0.0f;s1[t]=0.0f;s2[t]=0.0f;s3[t]=0.0f;}
-    for(unsigned int b=partition*4+lane/8;b<blocks;b+=4*partitions){
-        const unsigned char* p=weights+((unsigned long long)row*blocks+b)*18;
-        const float d=decode_half(*(const unsigned short*)p);
-        const unsigned int packed=*(const unsigned short*)(p+2+j);
+    // Next iteration's weights are loaded while this one is computed.
+    const unsigned int step=4*partitions;
+    unsigned int b=partition*4+lane/8;
+    const unsigned char* rowp=weights+(unsigned long long)row*blocks*18;
+    unsigned int nd=0,np=0;
+    if(b<blocks){nd=*(const unsigned short*)(rowp+b*18);np=*(const unsigned short*)(rowp+b*18+2+j);}
+    for(;b<blocks;b+=step){
+        const unsigned int dh=nd,packed=np;
+        if(b+step<blocks){nd=*(const unsigned short*)(rowp+(b+step)*18);np=*(const unsigned short*)(rowp+(b+step)*18+2+j);}
+        const float d=decode_half(dh);
         const unsigned int a=packed&255,c=packed>>8;
         const float w0=d*(float)((int)(a&15)-8),w1=d*(float)((int)(c&15)-8);
         const float w2=d*(float)((int)(a>>4)-8),w3=d*(float)((int)(c>>4)-8);
@@ -62,6 +68,8 @@ template<int B> __device__ void q4_batch_kparallel_t(const unsigned char* weight
 #define Q4_BATCH_INST(B) extern "C" __global__ void q4_batch_matvec_b##B(const unsigned char* w,const float* x,float* y,unsigned int c,unsigned int r){q4_batch_matvec_t<B>(w,x,y,c,r);} extern "C" __global__ void q4_batch_kparallel_b##B(const unsigned char* w,const float* x,float* y,unsigned int c,unsigned int r){q4_batch_kparallel_t<B>(w,x,y,c,r);}
 Q4_BATCH_INST(1) Q4_BATCH_INST(2) Q4_BATCH_INST(3) Q4_BATCH_INST(4)
 Q4_BATCH_INST(5) Q4_BATCH_INST(6) Q4_BATCH_INST(7) Q4_BATCH_INST(8)
+Q4_BATCH_INST(9) Q4_BATCH_INST(10) Q4_BATCH_INST(11) Q4_BATCH_INST(12)
+Q4_BATCH_INST(13) Q4_BATCH_INST(14) Q4_BATCH_INST(15) Q4_BATCH_INST(16)
 
 // Within every 32-value group, element p*4+{0,1,2,3} <- {2p, 2p+1, 2p+16, 2p+17}.
 extern "C" __global__ void q4_permute_x(const float* x,float* xp,unsigned int total){
@@ -82,10 +90,13 @@ template<int B> __device__ void q4_batch_tiled_gate_t(const unsigned short* code
     float a[B],b[B],c[B],d[B];
     #pragma unroll
     for(int t=0;t<B;++t){a[t]=0.0f;b[t]=0.0f;c[t]=0.0f;d[t]=0.0f;}
-    for(unsigned int k=threadIdx.x/32;k<blocks;k+=4){
-        const unsigned long long tile=(unsigned long long)(row/4)*blocks+k;
-        const float scale=decode_half(tiled_weight_load(scales+tile*4+(lane&3)));
-        const unsigned int q=tiled_weight_load(codes+(tile*8+(lane>>2))*4+(lane&3));
+    const unsigned long long tile0=(unsigned long long)(row/4)*blocks;
+    unsigned int k=threadIdx.x/32,ns=0,nq=0;
+    if(k<blocks){ns=scales[(tile0+k)*4+(lane&3)];nq=codes[((tile0+k)*8+(lane>>2))*4+(lane&3)];}
+    for(;k<blocks;k+=4){
+        const unsigned int sh=ns,q=nq;
+        if(k+4<blocks){ns=scales[(tile0+k+4)*4+(lane&3)];nq=codes[((tile0+k+4)*8+(lane>>2))*4+(lane&3)];}
+        const float scale=decode_half(sh);
         const unsigned int lo=q&255,hi=q>>8;
         const float w0=scale*(float)((int)(lo&15)-8),w1=scale*(float)((int)(hi&15)-8);
         const float w2=scale*(float)((int)(lo>>4)-8),w3=scale*(float)((int)(hi>>4)-8);
@@ -116,3 +127,5 @@ template<int B> __device__ void q4_batch_tiled_gate_t(const unsigned short* code
 extern "C" __global__ void q4_batch_tiled_gate_b##B(const unsigned short* c,const unsigned short* s,const float* x,float* g,float* u,unsigned int columns,unsigned int rows){q4_batch_tiled_gate_t<B>(c,s,x,g,u,columns,rows*2);}
 Q4_TILED_BATCH_INST(1) Q4_TILED_BATCH_INST(2) Q4_TILED_BATCH_INST(3) Q4_TILED_BATCH_INST(4)
 Q4_TILED_BATCH_INST(5) Q4_TILED_BATCH_INST(6) Q4_TILED_BATCH_INST(7) Q4_TILED_BATCH_INST(8)
+Q4_TILED_BATCH_INST(9) Q4_TILED_BATCH_INST(10) Q4_TILED_BATCH_INST(11) Q4_TILED_BATCH_INST(12)
+Q4_TILED_BATCH_INST(13) Q4_TILED_BATCH_INST(14) Q4_TILED_BATCH_INST(15) Q4_TILED_BATCH_INST(16)

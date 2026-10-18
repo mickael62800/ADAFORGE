@@ -1217,7 +1217,7 @@ impl CudaGenerationSession {
                 let limit = remaining
                     .min(room)
                     .min(speculation_depth())
-                    .min(super::batch::MAX_BATCH - 1);
+                    .min(super::batch::MAX_VERIFY - 1);
                 let draft = if limit > 0 { draft_lookup(&history, limit) } else { Vec::new() };
                 passes += 1;
                 if draft.is_empty() {
