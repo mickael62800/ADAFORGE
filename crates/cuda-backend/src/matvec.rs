@@ -595,4 +595,71 @@ mod tests {
             }
         }
     }
+    #[test]
+    #[ignore = "Requires RTX 4090 and CUDA"]
+    fn dual_tile_gate_matches_batched_bits_and_times() {
+        let ctx = CudaContext::new(0).unwrap();
+        let stream = ctx.default_stream();
+        let ptx = compile_ptx_with_opts(
+            format!(
+                "{}
+{}
+{}",
+                include_str!("../../../kernels/ada/q4_matvec.cu"),
+                include_str!("../../../kernels/ada/q4_tiled_probe.cu"),
+                include_str!("../../../kernels/ada/q4_batch.cu")
+            ),
+            CompileOptions { arch: Some("compute_89"), ..Default::default() },
+        )
+        .unwrap();
+        let module = ctx.load_module(ptx).unwrap();
+        for (columns, intermediate) in [(96u32, 8u32), (3840, 15360)] {
+            let tiles = (intermediate * 2 / 4 * (columns / 32)) as usize;
+            let mut state = 0x5be0_cd19u32 ^ columns;
+            let mut next = || {
+                state ^= state << 13;
+                state ^= state >> 17;
+                state ^= state << 5;
+                state
+            };
+            let codes: Vec<u16> = (0..tiles * 32).map(|_| next() as u16).collect();
+            let scales: Vec<u16> = (0..tiles * 4)
+                .map(|_| {
+                    let r = next();
+                    (((r >> 16) & 0x8000) | (0x1000 + (r & 0x3fff) % 0x3000)) as u16
+                })
+                .collect();
+            let x: Vec<f32> = (0..columns * 8).map(|_| (next() % 65536) as f32 / 32768.0 - 1.0).collect();
+            let (codes, scales, x) = (
+                stream.clone_htod(&codes).unwrap(),
+                stream.clone_htod(&scales).unwrap(),
+                stream.clone_htod(&x).unwrap(),
+            );
+            let mut report = String::new();
+            for n in [1u32, 4, 8] {
+                let run = |name: &str, grid: u32| {
+                    let f = module.load_function(name).unwrap();
+                    let mut g = stream.alloc_zeros::<f32>((intermediate * n) as usize).unwrap();
+                    let mut u = stream.alloc_zeros::<f32>((intermediate * n) as usize).unwrap();
+                    let mut best = f32::MAX;
+                    for _ in 0..5 {
+                        let e0 = stream.record_event(Some(sys::CUevent_flags::CU_EVENT_DEFAULT)).unwrap();
+                        let mut l = stream.launch_builder(&f);
+                        l.arg(&codes).arg(&scales).arg(&x).arg(&mut g).arg(&mut u).arg(&columns).arg(&intermediate);
+                        // SAFETY: tile buffers for 2*intermediate rows, outputs n*intermediate.
+                        unsafe { l.launch(LaunchConfig { grid_dim: (grid, 1, 1), block_dim: (128, 1, 1), shared_mem_bytes: 0 }) }.unwrap();
+                        let e1 = stream.record_event(Some(sys::CUevent_flags::CU_EVENT_DEFAULT)).unwrap();
+                        best = best.min(e0.elapsed_ms(&e1).unwrap());
+                    }
+                    (stream.clone_dtoh(&g).unwrap(), stream.clone_dtoh(&u).unwrap(), best)
+                };
+                let a = run(&format!("q4_batch_tiled_gate_b{n}"), intermediate * 2 / 4);
+                let b = run(&format!("q4_batch_tiled_gate_dual_b{n}"), intermediate * 2 / 8);
+                assert!(a.0.iter().zip(&b.0).all(|(x, y)| x.to_bits() == y.to_bits()), "gate {columns} n={n}");
+                assert!(a.1.iter().zip(&b.1).all(|(x, y)| x.to_bits() == y.to_bits()), "up {columns} n={n}");
+                report += &format!(" n{n}: {:.1}->{:.1}us", a.2 * 1e3, b.2 * 1e3);
+            }
+            println!("TILEDUAL {columns}x{intermediate}:{report}");
+        }
+    }
 }

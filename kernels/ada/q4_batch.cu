@@ -130,3 +130,62 @@ Q4_TILED_BATCH_INST(5) Q4_TILED_BATCH_INST(6) Q4_TILED_BATCH_INST(7) Q4_TILED_BA
 Q4_TILED_BATCH_INST(9) Q4_TILED_BATCH_INST(10) Q4_TILED_BATCH_INST(11) Q4_TILED_BATCH_INST(12)
 Q4_TILED_BATCH_INST(13) Q4_TILED_BATCH_INST(14) Q4_TILED_BATCH_INST(15) Q4_TILED_BATCH_INST(16)
 
+
+// Two tiles per CTA (tiles 2*blockIdx.x and +1): each lane computes its row
+// in both tiles, so every x load serves two rows. Per row the k sequence,
+// the FMA expressions and the (0+2)+(1+3) / 16,8,4 tree are those of
+// q4_batch_tiled_gate_t: bit-identical.
+template<int B> __device__ void q4_batch_tiled_gate_dual_t(const unsigned short* codes,const unsigned short* scales,
+    const float* x,float* g,float* u,unsigned int columns,unsigned int rows){
+    const unsigned int lane=threadIdx.x&31,j=(lane>>2)*2,blocks=columns/32;
+    const unsigned int rowa=(blockIdx.x*2)*4+(lane&3),rowb=rowa+4;
+    float a[2][B],b[2][B],c[2][B],d[2][B];
+    #pragma unroll
+    for(int r=0;r<2;++r){
+        #pragma unroll
+        for(int t=0;t<B;++t){a[r][t]=0.0f;b[r][t]=0.0f;c[r][t]=0.0f;d[r][t]=0.0f;}
+    }
+    const unsigned long long ta=(unsigned long long)(rowa/4)*blocks,tb=(unsigned long long)(rowb/4)*blocks;
+    for(unsigned int k=threadIdx.x/32;k<blocks;k+=4){
+        float w[2][4];
+        #pragma unroll
+        for(int r=0;r<2;++r){
+            const unsigned long long tile=(r?tb:ta)+k;
+            const float scale=decode_half(scales[tile*4+(lane&3)]);
+            const unsigned int q=codes[(tile*8+(lane>>2))*4+(lane&3)],lo=q&255,hi=q>>8;
+            w[r][0]=scale*(float)((int)(lo&15)-8);w[r][1]=scale*(float)((int)(hi&15)-8);
+            w[r][2]=scale*(float)((int)(lo>>4)-8);w[r][3]=scale*(float)((int)(hi>>4)-8);
+        }
+        #pragma unroll
+        for(int t=0;t<B;++t){
+            const float4 xv=*(const float4*)(x+(unsigned long long)t*columns+k*32+j*2);
+            #pragma unroll
+            for(int r=0;r<2;++r){a[r][t]+=w[r][0]*xv.x;b[r][t]+=w[r][1]*xv.y;c[r][t]+=w[r][2]*xv.z;d[r][t]+=w[r][3]*xv.w;}
+        }
+    }
+    __shared__ float partial[2][B][128];
+    #pragma unroll
+    for(int r=0;r<2;++r){
+        #pragma unroll
+        for(int t=0;t<B;++t)partial[r][t][threadIdx.x]=(a[r][t]+b[r][t])+(c[r][t]+d[r][t]);
+    }
+    __syncthreads();
+    if(threadIdx.x<64){
+        // Warp 0 reduces tile a, warp 1 tile b (same tree as the single kernel).
+        const unsigned int r=threadIdx.x/32,row=r?rowb:rowa,half=rows/2;
+        #pragma unroll
+        for(int t=0;t<B;++t){
+            const float* p=partial[r][t];
+            float sum=(p[lane]+p[64+lane])+(p[32+lane]+p[96+lane]);
+            for(int offset=16;offset>=4;offset>>=1)sum+=__shfl_down_sync(0xffffffff,sum,offset);
+            if(lane<4 && row<rows){
+                if(row>=half)u[(unsigned long long)t*half+row-half]=sum;
+                else g[(unsigned long long)t*half+row]=sum;
+            }
+        }
+    }
+}
+#define Q4_TILED_DUAL_INST(B) \
+extern "C" __global__ void q4_batch_tiled_gate_dual_b##B(const unsigned short* c,const unsigned short* s,const float* x,float* g,float* u,unsigned int columns,unsigned int rows){q4_batch_tiled_gate_dual_t<B>(c,s,x,g,u,columns,rows*2);}
+Q4_TILED_DUAL_INST(1) Q4_TILED_DUAL_INST(2) Q4_TILED_DUAL_INST(3) Q4_TILED_DUAL_INST(4)
+Q4_TILED_DUAL_INST(5) Q4_TILED_DUAL_INST(6) Q4_TILED_DUAL_INST(7) Q4_TILED_DUAL_INST(8)

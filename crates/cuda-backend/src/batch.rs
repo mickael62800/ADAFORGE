@@ -20,6 +20,8 @@ pub(crate) struct BatchKernels {
     matvec: Vec<CudaFunction>,
     kparallel: Vec<CudaFunction>,
     tiled_gate: Vec<CudaFunction>,
+    /// Two tiles per CTA (x loads shared by both): used when the tile count is even.
+    tiled_gate_dual: Vec<CudaFunction>,
     rms: CudaFunction,
     rms_add_rms: CudaFunction,
     rms_residual_scale: CudaFunction,
@@ -78,6 +80,9 @@ impl BatchKernels {
             matvec: family("q4_batch_matvec_b")?,
             kparallel: family("q4_batch_kparallel_b")?,
             tiled_gate: family("q4_batch_tiled_gate_b")?,
+            tiled_gate_dual: (1..=SPLIT_ABOVE as usize)
+                .map(|b| load(&format!("q4_batch_tiled_gate_dual_b{b}")))
+                .collect::<Result<Vec<_>, _>>()?,
             rms: load("rms_norm")?,
             rms_add_rms: load("rms_add_rms")?,
             rms_residual_scale: load("rms_residual_scale")?,
@@ -166,7 +171,14 @@ impl BatchKernels {
             let xv = xp.slice((first * columns) as usize..);
             let mut gv = g.slice_mut((first * intermediate) as usize..);
             let mut uv = u.slice_mut((first * intermediate) as usize..);
-            let mut l = self.stream.launch_builder(&self.tiled_gate[m as usize - 1]);
+            let tile_count = (intermediate * 2).div_ceil(4);
+            let dual = tile_count.is_multiple_of(2);
+            let f = if dual {
+                &self.tiled_gate_dual[m as usize - 1]
+            } else {
+                &self.tiled_gate[m as usize - 1]
+            };
+            let mut l = self.stream.launch_builder(f);
             l.arg(codes)
                 .arg(scales)
                 .arg(&xv)
@@ -174,8 +186,9 @@ impl BatchKernels {
                 .arg(&mut uv)
                 .arg(&columns)
                 .arg(&intermediate);
-            // SAFETY: tile buffers sized for 2*intermediate rows; views hold m rows of output.
-            unsafe { l.launch(grid((intermediate * 2).div_ceil(4), 128)) }
+            // SAFETY: tile buffers sized for 2*intermediate rows; views hold m rows
+            // of output; the dual kernel covers two (existing) tiles per CTA.
+            unsafe { l.launch(grid(if dual { tile_count / 2 } else { tile_count }, 128)) }
                 .map_err(|e| failure("Gate lot", e))?;
             first += m;
         }
