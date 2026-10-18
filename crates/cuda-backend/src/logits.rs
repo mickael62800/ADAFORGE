@@ -39,6 +39,27 @@ fn upload_weights(
     }
     .map_err(|e| failure("Poids Q6_K", e))
 }
+/// Default head layout: lossless repack (see q6_packed.cu). `ADAFORGE_Q6_PACKED=0` keeps GGUF bytes.
+fn packed_q6() -> bool {
+    std::env::var("ADAFORGE_Q6_PACKED").as_deref() != Ok("0")
+}
+/// Returns (codes: 208 bytes per block, d halves per block).
+pub(crate) fn pack_q6_lanes(bytes: &[u8]) -> (Vec<u8>, Vec<u16>) {
+    let blocks = bytes.len() / 210;
+    let mut codes = vec![0u8; blocks * 208];
+    let mut d = vec![0u16; blocks];
+    for block in 0..blocks {
+        let src = &bytes[block * 210..][..210];
+        let dst = &mut codes[block * 208..][..208];
+        for (o, &byte) in src[..192].iter().enumerate() {
+            let (k, lane) = (o / 16, o % 16);
+            dst[(k / 4) * 64 + lane * 4 + k % 4] = byte;
+        }
+        dst[192..208].copy_from_slice(&src[192..208]);
+        d[block] = u16::from_le_bytes([src[208], src[209]]);
+    }
+    (codes, d)
+}
 fn projection_rows() -> u32 {
     match std::env::var("ADAFORGE_EXPERIMENTAL_Q6_ROWS").as_deref() {
         Ok("8") => 8,
@@ -187,6 +208,7 @@ pub(crate) struct ResidentHead {
     lookup: cudarc::driver::CudaFunction,
     lookup_dynamic: cudarc::driver::CudaFunction,
     weights: CudaSlice<u8>,
+    dscales: Option<CudaSlice<u16>>,
     scales: CudaSlice<f32>,
     normalized: CudaSlice<f32>,
     raw: CudaSlice<f32>,
@@ -203,6 +225,7 @@ impl ResidentHead {
         head: OutputHead<'_>,
     ) -> Result<Self, DiagnosticError> {
         let tiled = tiled_q6();
+        let packed = !tiled && packed_q6();
         let width = head.matrix.columns();
         let rows = head.matrix.rows();
         if head.norm.weights().len() != width as usize || !head.cap.is_finite() || head.cap <= 0.0 {
@@ -215,6 +238,8 @@ impl ResidentHead {
             include_str!("../../../kernels/ada/q6_tiled.cu"),
             include_str!("../../../kernels/ada/rms_norm.cu")
         );
+        let source = format!("{source}
+{}", include_str!("../../../kernels/ada/q6_packed.cu"));
         let ptx = compile_ptx_with_opts(
             source,
             CompileOptions {
@@ -234,19 +259,25 @@ impl ResidentHead {
         };
         let rms = load("rms_norm")?;
         // Greedy consumes raw logits. The diagnostic above still checks softcap.
-        let raw = std::env::var("ADAFORGE_EXPERIMENTAL_Q6_RAW").as_deref() == Ok("1");
+        let raw = std::env::var("ADAFORGE_EXPERIMENTAL_Q6_RAW").as_deref() != Ok("0");
         let project = load(match (tiled, raw) {
+            _ if packed && raw => "q6_matvec_raw_packed",
+            _ if packed => "q6_matvec_packed",
             (true, true) => "q6_matvec_raw_tiled",
             (true, false) => "q6_matvec_tiled",
             (false, true) => "q6_matvec_raw",
             (false, false) => "q6_matvec",
         })?;
-        let lookup = load(if tiled {
+        let lookup = load(if packed {
+            "lookup_q6_packed"
+        } else if tiled {
             "lookup_q6_tiled"
         } else {
             "lookup_q6"
         })?;
-        let lookup_dynamic = load(if tiled {
+        let lookup_dynamic = load(if packed {
+            "lookup_dynamic_packed"
+        } else if tiled {
             "lookup_dynamic_tiled"
         } else {
             "lookup_dynamic"
@@ -262,7 +293,22 @@ impl ResidentHead {
             eps: head.norm.epsilon(),
             cap: head.cap,
             projection_rows: if tiled { 4 } else { projection_rows() },
-            weights: upload_weights(&stream, &head, tiled)?,
+            weights: if packed {
+                stream
+                    .clone_htod(&pack_q6_lanes(head.matrix.bytes()).0)
+                    .map_err(|e| failure("Poids Q6_K", e))?
+            } else {
+                upload_weights(&stream, &head, tiled)?
+            },
+            dscales: if packed {
+                Some(
+                    stream
+                        .clone_htod(&pack_q6_lanes(head.matrix.bytes()).1)
+                        .map_err(|e| failure("Échelles Q6_K", e))?,
+                )
+            } else {
+                None
+            },
             scales: stream
                 .clone_htod(head.norm.weights())
                 .map_err(|e| failure("Norme résidente", e))?,
@@ -291,7 +337,11 @@ impl ResidentHead {
         }
         let mut launch = self.stream.launch_builder(&self.lookup);
         launch
-            .arg(&self.weights)
+            .arg(&self.weights);
+        if let Some(d) = &self.dscales {
+            launch.arg(d);
+        }
+        launch
             .arg(output)
             .arg(&self.width)
             .arg(&token);
@@ -313,7 +363,11 @@ impl ResidentHead {
     ) -> Result<(), DiagnosticError> {
         let mut launch = self.stream.launch_builder(&self.lookup_dynamic);
         launch
-            .arg(&self.weights)
+            .arg(&self.weights);
+        if let Some(d) = &self.dscales {
+            launch.arg(d);
+        }
+        launch
             .arg(output)
             .arg(&self.width)
             .arg(state);
@@ -350,7 +404,11 @@ impl ResidentHead {
         .map_err(|e| failure("Norme finale résidente", e))?;
         let mut launch = self.stream.launch_builder(&self.project);
         launch
-            .arg(&self.weights)
+            .arg(&self.weights);
+        if let Some(d) = &self.dscales {
+            launch.arg(d);
+        }
+        launch
             .arg(&self.normalized)
             .arg(&mut self.raw)
             .arg(&mut self.capped)
@@ -583,5 +641,98 @@ mod tests {
             )
             .is_err()
         );
+    }
+    #[test]
+    #[ignore = "Requires RTX 4090 and CUDA"]
+    fn packed_q6_projection_and_lookup_match_native_bits() {
+        use cudarc::driver::{CudaContext, LaunchConfig, PushKernelArg};
+        let ctx = CudaContext::new(0).unwrap();
+        let stream = ctx.default_stream();
+        let source = format!(
+            "{}
+{}
+{}",
+            include_str!("../../../kernels/ada/embedding_q6.cu"),
+            include_str!("../../../kernels/ada/q6_matvec.cu"),
+            include_str!("../../../kernels/ada/q6_packed.cu")
+        );
+        let ptx = cudarc::nvrtc::compile_ptx_with_opts(
+            source,
+            cudarc::nvrtc::CompileOptions { arch: Some("compute_89"), ..Default::default() },
+        )
+        .unwrap();
+        let module = ctx.load_module(ptx).unwrap();
+        let mut state = 0x9e37_79b9u32;
+        let mut next = || {
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
+            state
+        };
+        for (columns, rows) in [(256u32, 3u32), (768, 9), (3840, 517)] {
+            let blocks = (columns / 256 * rows) as usize;
+            let mut bytes = vec![0u8; blocks * 210];
+            for block in 0..blocks {
+                let b = &mut bytes[block * 210..][..210];
+                b[..208].iter_mut().for_each(|v| *v = next() as u8);
+                let r = next();
+                let d = (((r >> 16) & 0x8000) | (0x0400 + (r & 0x3fff) % 0x3800)) as u16;
+                b[208..].copy_from_slice(&d.to_le_bytes());
+            }
+            let (codes, d) = pack_q6_lanes(&bytes);
+            let native = stream.clone_htod(&bytes).unwrap();
+            let codes = stream.clone_htod(&codes).unwrap();
+            let d = stream.clone_htod(&d).unwrap();
+            let x: Vec<f32> = (0..columns).map(|_| (next() % 65536) as f32 / 32768.0 - 1.0).collect();
+            let x = stream.clone_htod(&x).unwrap();
+            let cap = 30.0f32;
+            let run = |name: &str, packed: bool| {
+                let f = module.load_function(name).unwrap();
+                let mut raw = stream.alloc_zeros::<f32>(rows as usize).unwrap();
+                let mut capped = stream.alloc_zeros::<f32>(rows as usize).unwrap();
+                let mut l = stream.launch_builder(&f);
+                if packed {
+                    l.arg(&codes).arg(&d);
+                } else {
+                    l.arg(&native);
+                }
+                l.arg(&x).arg(&mut raw).arg(&mut capped).arg(&columns).arg(&rows).arg(&cap);
+                // SAFETY: buffers sized from rows/columns; one warp per bounded row.
+                unsafe {
+                    l.launch(LaunchConfig { grid_dim: (rows.div_ceil(4), 1, 1), block_dim: (128, 1, 1), shared_mem_bytes: 0 })
+                }
+                .unwrap();
+                (stream.clone_dtoh(&raw).unwrap(), stream.clone_dtoh(&capped).unwrap())
+            };
+            let a = run("q6_matvec", false);
+            let b = run("q6_matvec_packed", true);
+            let c = run("q6_matvec_raw_packed", true);
+            for i in 0..rows as usize {
+                assert_eq!(a.0[i].to_bits(), b.0[i].to_bits(), "raw row {i}");
+                assert_eq!(a.1[i].to_bits(), b.1[i].to_bits(), "capped row {i}");
+                assert_eq!(a.0[i].to_bits(), c.0[i].to_bits(), "raw-only row {i}");
+            }
+            for token in [0, rows / 2, rows - 1] {
+                let lookup = |name: &str, packed: bool| {
+                    let f = module.load_function(name).unwrap();
+                    let mut out = stream.alloc_zeros::<f32>(columns as usize).unwrap();
+                    let mut l = stream.launch_builder(&f);
+                    if packed {
+                        l.arg(&codes).arg(&d);
+                    } else {
+                        l.arg(&native);
+                    }
+                    l.arg(&mut out).arg(&columns).arg(&token);
+                    // SAFETY: token < rows, bounded channel writes.
+                    unsafe {
+                        l.launch(LaunchConfig { grid_dim: (columns.div_ceil(256), 1, 1), block_dim: (256, 1, 1), shared_mem_bytes: 0 })
+                    }
+                    .unwrap();
+                    stream.clone_dtoh(&out).unwrap()
+                };
+                let (n, p) = (lookup("lookup_q6", false), lookup("lookup_q6_packed", true));
+                assert!(n.iter().zip(&p).all(|(a, b)| a.to_bits() == b.to_bits()), "lookup token {token}");
+            }
+        }
     }
 }

@@ -124,6 +124,7 @@ pub(crate) fn check(matrix: &Q4Matrix) -> Result<MatvecReport, DiagnosticError> 
 /// Thread-major repack of a row-major Q4_0 matrix for `q4_tm_row`.
 /// `partitions` is the number of warps sharing one row (1 or 4).
 /// Returns (codes, scales); byte layout documented in q4_thread_major.cu.
+#[cfg(test)]
 pub(crate) fn thread_major(matrix: &Q4Matrix, partitions: usize) -> (Vec<u8>, Vec<u8>) {
     let bytes = matrix.bytes();
     let rows = matrix.rows() as usize;
@@ -467,7 +468,7 @@ mod tests {
                 let mut a = stream.alloc_zeros::<f32>(rows as usize).unwrap();
                 let mut b = stream.alloc_zeros::<f32>(rows as usize).unwrap();
                 // Distinct copies back to back: weights stream from DRAM as in decode.
-                let mut time = |tm: bool, out: &mut cudarc::driver::CudaSlice<f32>| {
+                let time = |tm: bool, out: &mut cudarc::driver::CudaSlice<f32>| {
                     let mut samples = Vec::new();
                     for rep in 0..6 {
                         let e0 = stream.record_event(Some(sys::CUevent_flags::CU_EVENT_DEFAULT)).unwrap();
