@@ -100,6 +100,10 @@ impl KvCache {
             Ok(())
         }
     }
+    pub(crate) fn truncate(&mut self, len: u32) -> Result<(), DiagnosticError> {
+        self.ensure_valid()?;
+        self.state.truncate(len).map_err(DiagnosticError)
+    }
     pub(crate) fn reset(&mut self) -> Result<(), DiagnosticError> {
         self.ensure_valid()?;
         self.state.reset();

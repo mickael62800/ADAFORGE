@@ -202,6 +202,9 @@ pub(crate) fn check(
 /// Tête et table liée conservées pendant toute une génération.
 pub(crate) struct ResidentHead {
     selection: super::greedy::GpuGreedy,
+    batch_project: Vec<cudarc::driver::CudaFunction>,
+    batch_normalized: Option<CudaSlice<f32>>,
+    batch_raw: Option<CudaSlice<f32>>,
     stream: Arc<CudaStream>,
     rms: cudarc::driver::CudaFunction,
     project: cudarc::driver::CudaFunction,
@@ -252,7 +255,7 @@ impl ResidentHead {
             .context()
             .load_module(ptx)
             .map_err(|e| failure("Module tête résidente", e))?;
-        let load = |name| {
+        let load = |name: &str| {
             module
                 .load_function(name)
                 .map_err(|e| failure("Kernel tête résidente", e))
@@ -284,6 +287,15 @@ impl ResidentHead {
         })?;
         Ok(Self {
             selection: super::greedy::GpuGreedy::new(stream.clone(), rows)?,
+            batch_project: if packed {
+                (1..=8)
+                    .map(|b| load(&format!("q6_matvec_raw_packed_b{b}")))
+                    .collect::<Result<Vec<_>, _>>()?
+            } else {
+                Vec::new()
+            },
+            batch_normalized: None,
+            batch_raw: None,
             rms,
             project,
             lookup,
@@ -425,6 +437,78 @@ impl ResidentHead {
         }
         .map_err(|e| failure("Projection résidente", e))?;
         Ok(())
+    }
+    pub(crate) fn supports_batch(&self) -> bool {
+        !self.batch_project.is_empty()
+    }
+    /// Greedy ids for `n` hidden states [n][width], reading the table once.
+    /// Each id equals `select` on the corresponding row (bit-identical logits).
+    pub(crate) fn select_batch(
+        &mut self,
+        input: &CudaSlice<f32>,
+        n: usize,
+    ) -> Result<Vec<u32>, DiagnosticError> {
+        let width = self.width as usize;
+        if n == 0 || n > self.batch_project.len() || input.len() < n * width {
+            return Err(DiagnosticError("Lot tête invalide".into()));
+        }
+        if self.batch_normalized.is_none() {
+            self.batch_normalized = Some(
+                self.stream
+                    .alloc_zeros(8 * width)
+                    .map_err(|e| failure("Buffer norme lot", e))?,
+            );
+            self.batch_raw = Some(
+                self.stream
+                    .alloc_zeros(8 * self.rows as usize)
+                    .map_err(|e| failure("Buffer logits lot", e))?,
+            );
+        }
+        let normalized = self.batch_normalized.as_mut().expect("allocated");
+        let raw = self.batch_raw.as_mut().expect("allocated");
+        let mut launch = self.stream.launch_builder(&self.rms);
+        launch
+            .arg(input)
+            .arg(&self.scales)
+            .arg(&mut *normalized)
+            .arg(&self.width)
+            .arg(&self.eps);
+        // SAFETY: n <= 8 vectors of width in input and normalized, one block each.
+        unsafe {
+            launch.launch(LaunchConfig {
+                grid_dim: (n as u32, 1, 1),
+                block_dim: (256, 1, 1),
+                shared_mem_bytes: 0,
+            })
+        }
+        .map_err(|e| failure("Norme finale lot", e))?;
+        let mut launch = self.stream.launch_builder(&self.batch_project[n - 1]);
+        launch
+            .arg(&self.weights)
+            .arg(self.dscales.as_ref().expect("packed head"))
+            .arg(&*normalized)
+            .arg(&mut *raw)
+            .arg(&self.width)
+            .arg(&self.rows);
+        // SAFETY: packed table, x holds n*width floats, raw 8*rows floats.
+        unsafe {
+            launch.launch(LaunchConfig {
+                grid_dim: (self.rows.div_ceil(4), 1, 1),
+                block_dim: (128, 1, 1),
+                shared_mem_bytes: 0,
+            })
+        }
+        .map_err(|e| failure("Projection lot", e))?;
+        let rows = self.rows as usize;
+        let mut ids = Vec::with_capacity(n);
+        for t in 0..n {
+            let src = raw.slice(t * rows..(t + 1) * rows);
+            self.stream
+                .memcpy_dtod(&src, &mut self.raw)
+                .map_err(|e| failure("Copie logits lot", e))?;
+            ids.push(self.selection.select(&self.raw)?);
+        }
+        Ok(ids)
     }
     pub(crate) fn select(&mut self, input: &CudaSlice<f32>) -> Result<u32, DiagnosticError> {
         self.project_gpu(input)?;
@@ -733,6 +817,85 @@ mod tests {
                 let (n, p) = (lookup("lookup_q6", false), lookup("lookup_q6_packed", true));
                 assert!(n.iter().zip(&p).all(|(a, b)| a.to_bits() == b.to_bits()), "lookup token {token}");
             }
+        }
+    }
+    #[test]
+    #[ignore = "Requires RTX 4090 and CUDA"]
+    fn batched_q6_head_matches_single_bits_and_amortizes() {
+        use cudarc::driver::{CudaContext, LaunchConfig, PushKernelArg, sys};
+        let ctx = CudaContext::new(0).unwrap();
+        let stream = ctx.default_stream();
+        let source = format!(
+            "{}
+{}
+{}",
+            include_str!("../../../kernels/ada/embedding_q6.cu"),
+            include_str!("../../../kernels/ada/q6_matvec.cu"),
+            include_str!("../../../kernels/ada/q6_packed.cu")
+        );
+        let ptx = cudarc::nvrtc::compile_ptx_with_opts(
+            source,
+            cudarc::nvrtc::CompileOptions { arch: Some("compute_89"), ..Default::default() },
+        )
+        .unwrap();
+        let module = ctx.load_module(ptx).unwrap();
+        let mut state = 0x3c6e_f372u32;
+        let mut next = || {
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
+            state
+        };
+        for (columns, rows) in [(768u32, 37u32), (3840, 262144)] {
+            let blocks = (columns / 256 * rows) as usize;
+            let mut bytes = vec![0u8; blocks * 210];
+            for block in 0..blocks {
+                let b = &mut bytes[block * 210..][..210];
+                b[..208].iter_mut().for_each(|v| *v = next() as u8);
+                let r = next();
+                let d = (((r >> 16) & 0x8000) | (0x0400 + (r & 0x3fff) % 0x3800)) as u16;
+                b[208..].copy_from_slice(&d.to_le_bytes());
+            }
+            let (codes, d) = pack_q6_lanes(&bytes);
+            drop(bytes);
+            let (codes, d) = (stream.clone_htod(&codes).unwrap(), stream.clone_htod(&d).unwrap());
+            let x: Vec<f32> = (0..columns * 8).map(|_| (next() % 65536) as f32 / 32768.0 - 1.0).collect();
+            let xs = stream.clone_htod(&x).unwrap();
+            let cfg = LaunchConfig { grid_dim: (rows.div_ceil(4), 1, 1), block_dim: (128, 1, 1), shared_mem_bytes: 0 };
+            let single = module.load_function("q6_matvec_raw_packed").unwrap();
+            let mut expected = Vec::new();
+            for t in 0..8usize {
+                let xt = stream.clone_htod(&x[t * columns as usize..(t + 1) * columns as usize]).unwrap();
+                let mut raw = stream.alloc_zeros::<f32>(rows as usize).unwrap();
+                let mut capped = stream.alloc_zeros::<f32>(rows as usize).unwrap();
+                let cap = 30.0f32;
+                let mut l = stream.launch_builder(&single);
+                l.arg(&codes).arg(&d).arg(&xt).arg(&mut raw).arg(&mut capped).arg(&columns).arg(&rows).arg(&cap);
+                // SAFETY: buffers sized from rows/columns; one warp per bounded row.
+                unsafe { l.launch(cfg) }.unwrap();
+                expected.extend(stream.clone_dtoh(&raw).unwrap());
+            }
+            let mut out = stream.alloc_zeros::<f32>(rows as usize * 8).unwrap();
+            let mut report = String::new();
+            for n in 1u32..=8 {
+                let f = module.load_function(&format!("q6_matvec_raw_packed_b{n}")).unwrap();
+                let mut best = f32::MAX;
+                for _ in 0..3 {
+                    let e0 = stream.record_event(Some(sys::CUevent_flags::CU_EVENT_DEFAULT)).unwrap();
+                    let mut l = stream.launch_builder(&f);
+                    l.arg(&codes).arg(&d).arg(&xs).arg(&mut out).arg(&columns).arg(&rows);
+                    // SAFETY: x holds 8 tokens, out 8*rows floats.
+                    unsafe { l.launch(cfg) }.unwrap();
+                    let e1 = stream.record_event(Some(sys::CUevent_flags::CU_EVENT_DEFAULT)).unwrap();
+                    best = best.min(e0.elapsed_ms(&e1).unwrap());
+                }
+                let got = stream.clone_dtoh(&out).unwrap();
+                for i in 0..(n * rows) as usize {
+                    assert_eq!(got[i].to_bits(), expected[i].to_bits(), "{columns}x{rows} n={n} i={i}");
+                }
+                report += &format!(" n{n}={best:.3}ms");
+            }
+            println!("Q6BATCH {columns}x{rows}:{report}");
         }
     }
 }

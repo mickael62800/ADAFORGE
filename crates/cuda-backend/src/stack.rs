@@ -1102,7 +1102,94 @@ impl CudaGenerationSession {
                 .map_err(|e| failure("Événement timing", e))
         };
         let (mut head_ms, mut blocks_ms, mut timed_steps) = (Vec::new(), Vec::new(), 0usize);
-        for _ in 0..max_new {
+        let speculative = std::env::var("ADAFORGE_SPECULATIVE").as_deref() != Ok("0")
+            && self.batch.is_some()
+            && self.head.supports_batch();
+        if speculative {
+            // Greedy speculative decoding with prompt-lookup drafts. Accepted
+            // tokens are exactly the greedy choices (batched logits are
+            // bit-identical), so the output equals plain greedy decoding.
+            let mut history = prompt.to_vec();
+            let (mut drafted, mut accepted, mut passes) = (0usize, 0usize, 0usize);
+            let mut next = self
+                .head
+                .select(self.layers.last().expect("48 layers").output())?;
+            while ids.len() < max_new as usize {
+                if stop.contains(&next) {
+                    stopped = true;
+                    break;
+                }
+                let ready = started.elapsed().as_secs_f64() * 1000.0;
+                first_ready.get_or_insert(ready);
+                last_ready = Some(ready);
+                ids.push(next);
+                on_token(next);
+                history.push(next);
+                let remaining = max_new as usize - ids.len();
+                let room = (self.capacity as usize).saturating_sub(self.cached.len() + 1);
+                let limit = remaining
+                    .min(room)
+                    .min(speculation_depth())
+                    .min(super::batch::MAX_BATCH - 1);
+                let draft = if limit > 0 { draft_lookup(&history, limit) } else { Vec::new() };
+                passes += 1;
+                if draft.is_empty() {
+                    self.consume(next)?;
+                    if remaining == 0 {
+                        break;
+                    }
+                    next = self
+                        .head
+                        .select(self.layers.last().expect("48 layers").output())?;
+                    continue;
+                }
+                let base = self.cached.len();
+                let mut batch = Vec::with_capacity(draft.len() + 1);
+                batch.push(next);
+                batch.extend_from_slice(&draft);
+                self.consume_batch(&batch)?;
+                let hidden = &self.batch.as_ref().expect("batch").1.input;
+                let predicted = self.head.select_batch(hidden, batch.len())?;
+                let mut keep = 0;
+                while keep < draft.len() && draft[keep] == predicted[keep] {
+                    keep += 1;
+                }
+                drafted += draft.len();
+                accepted += keep;
+                let mut emitted = 0;
+                for &token in &draft[..keep] {
+                    if stop.contains(&token) {
+                        stopped = true;
+                        break;
+                    }
+                    let ready = started.elapsed().as_secs_f64() * 1000.0;
+                    last_ready = Some(ready);
+                    ids.push(token);
+                    on_token(token);
+                    history.push(token);
+                    emitted += 1;
+                }
+                // Roll back the KV cache to the last accepted token.
+                let length = base + 1 + emitted;
+                for layer in &mut self.layers {
+                    layer.cache.truncate(length as u32)?;
+                    layer.next_position = length as u32;
+                }
+                self.cached.truncate(length);
+                history.truncate(prompt.len() + ids.len());
+                if stopped {
+                    break;
+                }
+                next = predicted[keep];
+            }
+            if std::env::var("ADAFORGE_DIAGNOSTICS").as_deref() == Ok("1") {
+                eprintln!(
+                    "SPECULATIVE {{\"passes\":{passes},\"drafted\":{drafted},\"accepted\":{accepted},\"tokens\":{}}}",
+                    ids.len()
+                );
+            }
+        }
+        for _ in 0..if speculative { 0 } else { max_new } {
             let e0 = if timing { Some(timed(&timing_stream)?) } else { None };
             let id = self
                 .head
@@ -1190,6 +1277,33 @@ impl adaforge_application::GenerationSession for CudaGenerationSession {
         self.poisoned = false;
         Ok(())
     }
+}
+/// Draft length for speculative decoding (`ADAFORGE_SPEC_DEPTH`, default 6).
+fn speculation_depth() -> usize {
+    std::env::var("ADAFORGE_SPEC_DEPTH")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(6)
+}
+/// Prompt-lookup draft: tokens that followed the most recent earlier
+/// occurrence of the last 3 tokens (2-token matches cost more than they win).
+fn draft_lookup(history: &[u32], limit: usize) -> Vec<u32> {
+    for gram in [3usize] {
+        if history.len() <= gram {
+            continue;
+        }
+        let tail = &history[history.len() - gram..];
+        for start in (0..history.len() - gram).rev() {
+            if &history[start..start + gram] == tail {
+                let from = start + gram;
+                let end = (from + limit).min(history.len());
+                if from < end {
+                    return history[from..end].to_vec();
+                }
+            }
+        }
+    }
+    Vec::new()
 }
 fn run_layers(
     layers: &mut [ResidentLayer],

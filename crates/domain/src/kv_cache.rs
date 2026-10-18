@@ -79,6 +79,14 @@ impl KvState {
     pub fn reset(&mut self) {
         self.len = 0;
     }
+    /// Forget tokens beyond `len` (speculative rollback). Never grows.
+    pub fn truncate(&mut self, len: u32) -> Result<(), String> {
+        if len > self.len {
+            return Err("Troncature KV au-delà de la longueur".into());
+        }
+        self.len = len;
+        Ok(())
+    }
 }
 #[cfg(test)]
 mod tests {
@@ -110,5 +118,14 @@ mod tests {
         ] {
             assert!(KvLayout::new(dims.0, dims.1, dims.2).is_err());
         }
+    }
+    #[test]
+    fn truncate_rolls_back_but_never_grows() {
+        let mut state = KvState::new(KvLayout::new(8, 1, 4).unwrap());
+        state.commit(5).unwrap();
+        state.truncate(3).unwrap();
+        assert_eq!(state.len(), 3);
+        assert!(state.truncate(4).is_err());
+        assert_eq!(state.append_range(2).unwrap(), 12..20);
     }
 }
