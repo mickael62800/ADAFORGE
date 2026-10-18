@@ -79,7 +79,7 @@ impl AttentionKernel {
                     _ => "attention_split_scores",
                 })?,
                 softmax_fn: load("attention_split_softmax")?,
-                values_fn: load("attention_split_values")?,
+                values_fn: load("attention_split_values_async")?,
                 scores: stream
                     .alloc_zeros::<f32>(
                         config.q_heads() as usize * super::stack::MAX_CONTEXT as usize,
@@ -289,8 +289,9 @@ impl AttentionKernel {
             Some(st) => l.arg(st),
             None => l.arg(&null),
         };
-        // SAFETY: one thread per (head, channel < width); output qheads*width.
-        unsafe { l.launch(cfg(qheads, width.div_ceil(64), 64)) }
+        // SAFETY: one 128-thread CTA per (head, 32 channels); scores rows and
+        // V rows are 16-byte aligned (MAX_CONTEXT and widths are multiples of 4).
+        unsafe { l.launch(cfg(qheads, width.div_ceil(32), 128)) }
             .map_err(|e| failure("Valeurs attention", e))?;
         Ok(())
     }
@@ -536,6 +537,9 @@ mod reference_bits {
             m.load_function("attention_split_softmax").unwrap(),
             m.load_function("attention_split_values").unwrap(),
         );
+        let sva = m.load_function("attention_split_values_async").unwrap();
+        let sva2 = m.load_function("attention_split_values_async_h2").unwrap();
+        let sva4 = m.load_function("attention_split_values_async_h4").unwrap();
         let mut state = 0x6a09_e667u32;
         let mut next = |amp: f32| {
             state ^= state << 13;
@@ -599,6 +603,19 @@ mod reference_bits {
                             c.iter().zip(&b).all(|(x, y)| x.to_bits() == y.to_bits()),
                             "split: width {width} tokens {tokens} window {window}"
                         );
+                        let mut out2 = stream.alloc_zeros::<f32>((qheads * width) as usize).unwrap();
+                        let hv = (qheads / kvheads).min(4);
+                        let svf = match hv { 4 => &sva4, 2 => &sva2, _ => &sva };
+                        let mut l = stream.launch_builder(svf);
+                        l.arg(&scores).arg(&v).arg(&mut out2).arg(&width).arg(&qheads).arg(&kvheads)
+                            .arg(&tokens).arg(&position).arg(&window).arg(&stride).arg(&null);
+                        // SAFETY: one CTA per (head, 32 channels); scores rows aligned to 4.
+                        unsafe { l.launch(cfg(qheads / hv, width.div_ceil(32), 128)) }.unwrap();
+                        let c2 = stream.clone_dtoh(&out2).unwrap();
+                        assert!(
+                            c2.iter().zip(&b).all(|(x, y)| x.to_bits() == y.to_bits()),
+                            "async values: width {width} tokens {tokens} window {window}"
+                        );
                     }
                 }
             }
@@ -620,7 +637,7 @@ mod split_timing {
         )
         .unwrap();
         let m = ctx.load_module(ptx).unwrap();
-        let names = ["attention_split_scores", "attention_split_softmax", "attention_split_values", "attention_split_values_h2", "attention_split_values_h4", "attention_split_scores_h2", "attention_split_scores_h4", "attention_split_scores_h8"];
+        let names = ["attention_split_scores", "attention_split_softmax", "attention_split_values", "attention_split_values_h2", "attention_split_values_h4", "attention_split_scores_h2", "attention_split_scores_h4", "attention_split_scores_h8", "attention_split_values_async", "attention_split_values_async_h2", "attention_split_values_async_h4"];
         let f: Vec<_> = names.iter().map(|n| m.load_function(n).unwrap()).collect();
         for (tokens, kvheads, width, window) in [(7620u32, 8u32, 256u32, 1024u32), (7620, 1, 512, 0)] {
             let qheads = 16u32;
@@ -675,6 +692,19 @@ mod split_timing {
                 times[1] = times[1].min(e1.elapsed_ms(&e2).unwrap());
                 times[2] = times[2].min(e2.elapsed_ms(&e3).unwrap());
             }
+            let mut best = f32::MAX;
+            for _ in 0..10 {
+                let e0 = stream.record_event(Some(sys::CUevent_flags::CU_EVENT_DEFAULT)).unwrap();
+                let hv = (qheads / kvheads).min(4);
+                let mut l = stream.launch_builder(&f[match hv { 4 => 10, 2 => 9, _ => 8 }]);
+                l.arg(&scores).arg(&v).arg(&mut out).arg(&width).arg(&qheads).arg(&kvheads)
+                    .arg(&tokens).arg(&position).arg(&window).arg(&stride).arg(&null);
+                // SAFETY: one CTA per (head group, 32 channels).
+                unsafe { l.launch(cfg(qheads / hv, width.div_ceil(32), 128)) }.unwrap();
+                let e1 = stream.record_event(Some(sys::CUevent_flags::CU_EVENT_DEFAULT)).unwrap();
+                best = best.min(e0.elapsed_ms(&e1).unwrap());
+            }
+            println!("ASYNC values kv{kvheads}: {:.1}us", best * 1e3);
             println!("SPLIT kv{kvheads} w{width} window{window}: scores {:.1}us softmax {:.1}us values {:.1}us",
                 times[0] * 1e3, times[1] * 1e3, times[2] * 1e3);
         }

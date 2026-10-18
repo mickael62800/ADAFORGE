@@ -293,3 +293,71 @@ template<int HPT> __device__ void split_scores_shared(const float* q,const float
 extern "C" __global__ void attention_split_scores_h2(SPLIT_SCORES_ARGS){split_scores_shared<2>(SPLIT_SCORES_PASS);}
 extern "C" __global__ void attention_split_scores_h4(SPLIT_SCORES_ARGS){split_scores_shared<4>(SPLIT_SCORES_PASS);}
 extern "C" __global__ void attention_split_scores_h8(SPLIT_SCORES_ARGS){split_scores_shared<8>(SPLIT_SCORES_PASS);}
+
+// Values with an asynchronous shared-memory pipeline. One CTA = 32 channels
+// of one head; all 4 warps issue cp.async copies of V tiles (64 tokens x 32
+// channels) and probability tiles four stages ahead, and warp 0 runs the
+// chains: sum += p[t] * v[t][c] in token order, exactly as the other value
+// kernels (same FMA expression): bit-identical.
+__device__ __forceinline__ void cp_async16(void* smem,const void* gmem,unsigned int bytes){
+    const unsigned int s=(unsigned int)__cvta_generic_to_shared(smem);
+    asm volatile("cp.async.cg.shared.global [%0], [%1], 16, %2;\n" :: "r"(s),"l"(gmem),"r"(bytes));
+}
+__device__ __forceinline__ void cp_async_commit(){asm volatile("cp.async.commit_group;\n");}
+template<int N> __device__ __forceinline__ void cp_async_wait(){asm volatile("cp.async.wait_group %0;\n" :: "n"(N));}
+template<int HPT> __device__ __forceinline__ void split_values_async_impl(const float* scores,const float* values,float* output,
+    unsigned int width,unsigned int q_heads,unsigned int kv_heads,unsigned int tokens,unsigned int position,
+    unsigned int window,unsigned int stride_scores,const unsigned int* state){
+    constexpr int T=64,S=4;
+    if(state){tokens=state[1]+1;position=state[1];}
+    position+=blockIdx.z;
+    scores+=(unsigned long long)blockIdx.z*q_heads*stride_scores;
+    output+=(unsigned long long)blockIdx.z*q_heads*width;
+    unsigned int start,end;split_range(tokens,position,window,start,end);
+    // HPT heads sharing one KV head per CTA; warp h < HPT runs head0+h.
+    const unsigned int head0=blockIdx.x*HPT,c0=blockIdx.y*32,lane=threadIdx.x&31,warp=threadIdx.x/32;
+    const unsigned int kv=head0/(q_heads/kv_heads),n=end-start,tiles=(n+T-1)/T;
+    const unsigned long long stride=(unsigned long long)kv_heads*width;
+    const float* p=scores+(unsigned long long)head0*stride_scores;
+    const float* vbase=values+(unsigned long long)kv*width+c0+(unsigned long long)start*stride;
+    __shared__ __align__(16) float vs[S][T][32];
+    __shared__ __align__(16) float ps[S][HPT][T];
+    auto issue=[&](unsigned int tile){
+        const unsigned int stage=tile%S,base=tile*T;
+        for(unsigned int i=threadIdx.x;i<T*8;i+=128){
+            const unsigned int t=i/8,q=i%8;
+            const bool ok=base+t<n;
+            cp_async16(&vs[stage][t][q*4],vbase+(ok?(unsigned long long)(base+t)*stride:0)+q*4,ok?16u:0u);
+        }
+        for(unsigned int i=threadIdx.x;i<HPT*(T/4);i+=128){
+            const unsigned int h=i/(T/4),t=(i%(T/4))*4;
+            const bool ok=base+t<n;
+            cp_async16(&ps[stage][h][t],p+(unsigned long long)h*stride_scores+(ok?base+t:0),ok?16u:0u);
+        }
+    };
+    #pragma unroll
+    for(int i=0;i<S-1;++i){if((unsigned int)i<tiles)issue(i);cp_async_commit();}
+    float sum=0.0f;
+    for(unsigned int tile=0;tile<tiles;++tile){
+        if(tile+S-1<tiles)issue(tile+S-1);
+        cp_async_commit();
+        cp_async_wait<S-1>();
+        __syncthreads();
+        if(warp<HPT){
+            const unsigned int stage=tile%S,count=min((unsigned int)T,n-tile*T);
+            const float* pr=ps[stage][warp];
+            if(count==T){
+                #pragma unroll
+                for(unsigned int t=0;t<T;++t)sum+=pr[t]*vs[stage][t][lane];
+            }else{
+                for(unsigned int t=0;t<count;++t)sum+=pr[t]*vs[stage][t][lane];
+            }
+        }
+        __syncthreads();
+    }
+    if(warp<HPT && c0+lane<width)output[(unsigned long long)(head0+warp)*width+c0+lane]=sum;
+}
+#define SPLIT_VALUES_ASYNC_INST(NAME,H) extern "C" __global__ void __launch_bounds__(128) NAME(SPLIT_VALUES_ARGS){split_values_async_impl<H>(SPLIT_VALUES_PASS);}
+SPLIT_VALUES_ASYNC_INST(attention_split_values_async,1)
+SPLIT_VALUES_ASYNC_INST(attention_split_values_async_h2,2)
+SPLIT_VALUES_ASYNC_INST(attention_split_values_async_h4,4)
