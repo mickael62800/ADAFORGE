@@ -255,3 +255,142 @@ extern "C" __global__ void q6_matvec_raw_packed_b5(const unsigned char* c,const 
 extern "C" __global__ void q6_matvec_raw_packed_b6(const unsigned char* c,const unsigned short* d,const float* x,float* raw,unsigned int columns,unsigned int rows){q6_project_packed_batch<6>(c,d,x,raw,columns,rows);}
 extern "C" __global__ void q6_matvec_raw_packed_b7(const unsigned char* c,const unsigned short* d,const float* x,float* raw,unsigned int columns,unsigned int rows){q6_project_packed_batch<7>(c,d,x,raw,columns,rows);}
 extern "C" __global__ void q6_matvec_raw_packed_b8(const unsigned char* c,const unsigned short* d,const float* x,float* raw,unsigned int columns,unsigned int rows){q6_project_packed_batch<8>(c,d,x,raw,columns,rows);}
+
+// Two rows per warp (rowA, rowB = rowA + rows/2 halves of the grid), loads of
+// both in flight together. Per row: same values, order and tree as
+// q6_project_packed (raw logits only): bit-identical.
+__device__ __forceinline__ void q6_project_packed_dual(const unsigned char* codes,const unsigned short* dv,const float* x,float* raw,unsigned int columns,unsigned int rows) {
+    const unsigned int lane=threadIdx.x&31,warps=gridDim.x*(blockDim.x/32);
+    const unsigned int rowA=blockIdx.x*(blockDim.x/32)+threadIdx.x/32,rowB=rowA+warps;
+    if(rowA>=rows)return;
+    const bool hasB=rowB<rows;
+    const unsigned int rowBc=hasB?rowB:rowA;
+    const unsigned int j=lane&15,blocks=columns/256;
+    float sa0=0.0f,sb0=0.0f;
+    float sa1=0.0f,sb1=0.0f;
+    float sa2=0.0f,sb2=0.0f;
+    float sa3=0.0f,sb3=0.0f;
+    float sa4=0.0f,sb4=0.0f;
+    float sa5=0.0f,sb5=0.0f;
+    float sa6=0.0f,sb6=0.0f;
+    float sa7=0.0f,sb7=0.0f;
+    float sa8=0.0f,sb8=0.0f;
+    float sa9=0.0f,sb9=0.0f;
+    float sa10=0.0f,sb10=0.0f;
+    float sa11=0.0f,sb11=0.0f;
+    float sa12=0.0f,sb12=0.0f;
+    float sa13=0.0f,sb13=0.0f;
+    float sa14=0.0f,sb14=0.0f;
+    float sa15=0.0f,sb15=0.0f;
+    for(unsigned int block=lane/16;block<blocks;block+=2){
+
+        const unsigned char* ba=codes+((unsigned long long)rowA*blocks+block)*208;
+        const unsigned int* cwa=(const unsigned int*)ba;
+        const unsigned int c0a=cwa[j],c1a=cwa[16+j],c2a=cwa[32+j];
+        const uint4 sva=*(const uint4*)(ba+192);
+        const unsigned int sc0a=sva.x,sc1a=sva.y,sc2a=sva.z,sc3a=sva.w;
+        const float da=embedding_half(dv[(unsigned long long)rowA*blocks+block]);
+        const unsigned int hi00a=((c2a>>0)&255u);
+        const unsigned int lo000a=((c0a>>0)&255u);
+        const unsigned int lo010a=((c0a>>16)&255u);
+        const unsigned int hi01a=((c2a>>8)&255u);
+        const unsigned int lo001a=((c0a>>8)&255u);
+        const unsigned int lo011a=((c0a>>24)&255u);
+        const int q0a=(int)((lo000a&15)|(((hi00a>>0)&3)<<4))-32;
+        sa0+=((da*(float)(signed char)((sc0a>>0)&255u))*(float)q0a)*x[block*256+0+j];
+        const int q1a=(int)((lo001a&15)|(((hi01a>>0)&3)<<4))-32;
+        sa1+=((da*(float)(signed char)((sc0a>>8)&255u))*(float)q1a)*x[block*256+16+j];
+        const int q2a=(int)((lo010a&15)|(((hi00a>>2)&3)<<4))-32;
+        sa2+=((da*(float)(signed char)((sc0a>>16)&255u))*(float)q2a)*x[block*256+32+j];
+        const int q3a=(int)((lo011a&15)|(((hi01a>>2)&3)<<4))-32;
+        sa3+=((da*(float)(signed char)((sc0a>>24)&255u))*(float)q3a)*x[block*256+48+j];
+        const int q4a=(int)((lo000a>>4)|(((hi00a>>4)&3)<<4))-32;
+        sa4+=((da*(float)(signed char)((sc1a>>0)&255u))*(float)q4a)*x[block*256+64+j];
+        const int q5a=(int)((lo001a>>4)|(((hi01a>>4)&3)<<4))-32;
+        sa5+=((da*(float)(signed char)((sc1a>>8)&255u))*(float)q5a)*x[block*256+80+j];
+        const int q6a=(int)((lo010a>>4)|(((hi00a>>6)&3)<<4))-32;
+        sa6+=((da*(float)(signed char)((sc1a>>16)&255u))*(float)q6a)*x[block*256+96+j];
+        const int q7a=(int)((lo011a>>4)|(((hi01a>>6)&3)<<4))-32;
+        sa7+=((da*(float)(signed char)((sc1a>>24)&255u))*(float)q7a)*x[block*256+112+j];
+        const unsigned int hi10a=((c2a>>16)&255u);
+        const unsigned int lo100a=((c1a>>0)&255u);
+        const unsigned int lo110a=((c1a>>16)&255u);
+        const unsigned int hi11a=((c2a>>24)&255u);
+        const unsigned int lo101a=((c1a>>8)&255u);
+        const unsigned int lo111a=((c1a>>24)&255u);
+        const int q8a=(int)((lo100a&15)|(((hi10a>>0)&3)<<4))-32;
+        sa8+=((da*(float)(signed char)((sc2a>>0)&255u))*(float)q8a)*x[block*256+128+j];
+        const int q9a=(int)((lo101a&15)|(((hi11a>>0)&3)<<4))-32;
+        sa9+=((da*(float)(signed char)((sc2a>>8)&255u))*(float)q9a)*x[block*256+144+j];
+        const int q10a=(int)((lo110a&15)|(((hi10a>>2)&3)<<4))-32;
+        sa10+=((da*(float)(signed char)((sc2a>>16)&255u))*(float)q10a)*x[block*256+160+j];
+        const int q11a=(int)((lo111a&15)|(((hi11a>>2)&3)<<4))-32;
+        sa11+=((da*(float)(signed char)((sc2a>>24)&255u))*(float)q11a)*x[block*256+176+j];
+        const int q12a=(int)((lo100a>>4)|(((hi10a>>4)&3)<<4))-32;
+        sa12+=((da*(float)(signed char)((sc3a>>0)&255u))*(float)q12a)*x[block*256+192+j];
+        const int q13a=(int)((lo101a>>4)|(((hi11a>>4)&3)<<4))-32;
+        sa13+=((da*(float)(signed char)((sc3a>>8)&255u))*(float)q13a)*x[block*256+208+j];
+        const int q14a=(int)((lo110a>>4)|(((hi10a>>6)&3)<<4))-32;
+        sa14+=((da*(float)(signed char)((sc3a>>16)&255u))*(float)q14a)*x[block*256+224+j];
+        const int q15a=(int)((lo111a>>4)|(((hi11a>>6)&3)<<4))-32;
+        sa15+=((da*(float)(signed char)((sc3a>>24)&255u))*(float)q15a)*x[block*256+240+j];
+    
+
+        const unsigned char* bb=codes+((unsigned long long)rowBc*blocks+block)*208;
+        const unsigned int* cwb=(const unsigned int*)bb;
+        const unsigned int c0b=cwb[j],c1b=cwb[16+j],c2b=cwb[32+j];
+        const uint4 svb=*(const uint4*)(bb+192);
+        const unsigned int sc0b=svb.x,sc1b=svb.y,sc2b=svb.z,sc3b=svb.w;
+        const float db=embedding_half(dv[(unsigned long long)rowBc*blocks+block]);
+        const unsigned int hi00b=((c2b>>0)&255u);
+        const unsigned int lo000b=((c0b>>0)&255u);
+        const unsigned int lo010b=((c0b>>16)&255u);
+        const unsigned int hi01b=((c2b>>8)&255u);
+        const unsigned int lo001b=((c0b>>8)&255u);
+        const unsigned int lo011b=((c0b>>24)&255u);
+        const int q0b=(int)((lo000b&15)|(((hi00b>>0)&3)<<4))-32;
+        sb0+=((db*(float)(signed char)((sc0b>>0)&255u))*(float)q0b)*x[block*256+0+j];
+        const int q1b=(int)((lo001b&15)|(((hi01b>>0)&3)<<4))-32;
+        sb1+=((db*(float)(signed char)((sc0b>>8)&255u))*(float)q1b)*x[block*256+16+j];
+        const int q2b=(int)((lo010b&15)|(((hi00b>>2)&3)<<4))-32;
+        sb2+=((db*(float)(signed char)((sc0b>>16)&255u))*(float)q2b)*x[block*256+32+j];
+        const int q3b=(int)((lo011b&15)|(((hi01b>>2)&3)<<4))-32;
+        sb3+=((db*(float)(signed char)((sc0b>>24)&255u))*(float)q3b)*x[block*256+48+j];
+        const int q4b=(int)((lo000b>>4)|(((hi00b>>4)&3)<<4))-32;
+        sb4+=((db*(float)(signed char)((sc1b>>0)&255u))*(float)q4b)*x[block*256+64+j];
+        const int q5b=(int)((lo001b>>4)|(((hi01b>>4)&3)<<4))-32;
+        sb5+=((db*(float)(signed char)((sc1b>>8)&255u))*(float)q5b)*x[block*256+80+j];
+        const int q6b=(int)((lo010b>>4)|(((hi00b>>6)&3)<<4))-32;
+        sb6+=((db*(float)(signed char)((sc1b>>16)&255u))*(float)q6b)*x[block*256+96+j];
+        const int q7b=(int)((lo011b>>4)|(((hi01b>>6)&3)<<4))-32;
+        sb7+=((db*(float)(signed char)((sc1b>>24)&255u))*(float)q7b)*x[block*256+112+j];
+        const unsigned int hi10b=((c2b>>16)&255u);
+        const unsigned int lo100b=((c1b>>0)&255u);
+        const unsigned int lo110b=((c1b>>16)&255u);
+        const unsigned int hi11b=((c2b>>24)&255u);
+        const unsigned int lo101b=((c1b>>8)&255u);
+        const unsigned int lo111b=((c1b>>24)&255u);
+        const int q8b=(int)((lo100b&15)|(((hi10b>>0)&3)<<4))-32;
+        sb8+=((db*(float)(signed char)((sc2b>>0)&255u))*(float)q8b)*x[block*256+128+j];
+        const int q9b=(int)((lo101b&15)|(((hi11b>>0)&3)<<4))-32;
+        sb9+=((db*(float)(signed char)((sc2b>>8)&255u))*(float)q9b)*x[block*256+144+j];
+        const int q10b=(int)((lo110b&15)|(((hi10b>>2)&3)<<4))-32;
+        sb10+=((db*(float)(signed char)((sc2b>>16)&255u))*(float)q10b)*x[block*256+160+j];
+        const int q11b=(int)((lo111b&15)|(((hi11b>>2)&3)<<4))-32;
+        sb11+=((db*(float)(signed char)((sc2b>>24)&255u))*(float)q11b)*x[block*256+176+j];
+        const int q12b=(int)((lo100b>>4)|(((hi10b>>4)&3)<<4))-32;
+        sb12+=((db*(float)(signed char)((sc3b>>0)&255u))*(float)q12b)*x[block*256+192+j];
+        const int q13b=(int)((lo101b>>4)|(((hi11b>>4)&3)<<4))-32;
+        sb13+=((db*(float)(signed char)((sc3b>>8)&255u))*(float)q13b)*x[block*256+208+j];
+        const int q14b=(int)((lo110b>>4)|(((hi10b>>6)&3)<<4))-32;
+        sb14+=((db*(float)(signed char)((sc3b>>16)&255u))*(float)q14b)*x[block*256+224+j];
+        const int q15b=(int)((lo111b>>4)|(((hi11b>>6)&3)<<4))-32;
+        sb15+=((db*(float)(signed char)((sc3b>>24)&255u))*(float)q15b)*x[block*256+240+j];
+    
+    }
+    float suma=((((sa0+sa1)+(sa2+sa3))+((sa4+sa5)+(sa6+sa7)))+(((sa8+sa9)+(sa10+sa11))+((sa12+sa13)+(sa14+sa15))));
+    float sumb=((((sb0+sb1)+(sb2+sb3))+((sb4+sb5)+(sb6+sb7)))+(((sb8+sb9)+(sb10+sb11))+((sb12+sb13)+(sb14+sb15))));
+    for(int offset=16;offset>0;offset>>=1){suma+=__shfl_down_sync(0xffffffff,suma,offset);sumb+=__shfl_down_sync(0xffffffff,sumb,offset);}
+    if(lane==0){raw[rowA]=suma;if(hasB)raw[rowB]=sumb;}
+}
+extern "C" __global__ void q6_matvec_raw_packed_dual(const unsigned char* c,const unsigned short* d,const float* x,float* raw,float* capped,unsigned int columns,unsigned int rows,float cap){q6_project_packed_dual(c,d,x,raw,columns,rows);}

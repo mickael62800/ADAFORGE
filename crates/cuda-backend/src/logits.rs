@@ -203,6 +203,8 @@ pub(crate) fn check(
 pub(crate) struct ResidentHead {
     selection: super::greedy::GpuGreedy,
     batch_project: Vec<cudarc::driver::CudaFunction>,
+    /// Rows handled by each warp of the projection kernel (2 for the dual kernel).
+    rows_per_warp: u32,
     batch_normalized: Option<CudaSlice<f32>>,
     batch_raw: Option<CudaSlice<f32>>,
     stream: Arc<CudaStream>,
@@ -264,7 +266,7 @@ impl ResidentHead {
         // Greedy consumes raw logits. The diagnostic above still checks softcap.
         let raw = std::env::var("ADAFORGE_EXPERIMENTAL_Q6_RAW").as_deref() != Ok("0");
         let project = load(match (tiled, raw) {
-            _ if packed && raw => "q6_matvec_raw_packed",
+            _ if packed && raw => "q6_matvec_raw_packed_dual",
             _ if packed => "q6_matvec_packed",
             (true, true) => "q6_matvec_raw_tiled",
             (true, false) => "q6_matvec_tiled",
@@ -296,6 +298,7 @@ impl ResidentHead {
             },
             batch_normalized: None,
             batch_raw: None,
+            rows_per_warp: if packed && raw { 2 } else { 1 },
             rms,
             project,
             lookup,
@@ -430,7 +433,7 @@ impl ResidentHead {
         // SAFETY: validated table dimensions; one warp per bounded row, disjoint output buffers.
         unsafe {
             launch.launch(LaunchConfig {
-                grid_dim: (self.rows.div_ceil(self.projection_rows), 1, 1),
+                grid_dim: (self.rows.div_ceil(self.projection_rows * self.rows_per_warp), 1, 1),
                 block_dim: (self.projection_rows * 32, 1, 1),
                 shared_mem_bytes: 0,
             })
@@ -896,6 +899,71 @@ mod tests {
                 report += &format!(" n{n}={best:.3}ms");
             }
             println!("Q6BATCH {columns}x{rows}:{report}");
+        }
+    }
+    #[test]
+    #[ignore = "Requires RTX 4090 and CUDA"]
+    fn dual_row_q6_head_matches_bits_and_times() {
+        use cudarc::driver::{CudaContext, LaunchConfig, PushKernelArg, sys};
+        let ctx = CudaContext::new(0).unwrap();
+        let stream = ctx.default_stream();
+        let source = format!(
+            "{}
+{}
+{}",
+            include_str!("../../../kernels/ada/embedding_q6.cu"),
+            include_str!("../../../kernels/ada/q6_matvec.cu"),
+            include_str!("../../../kernels/ada/q6_packed.cu")
+        );
+        let ptx = cudarc::nvrtc::compile_ptx_with_opts(
+            source,
+            cudarc::nvrtc::CompileOptions { arch: Some("compute_89"), ..Default::default() },
+        )
+        .unwrap();
+        let module = ctx.load_module(ptx).unwrap();
+        let mut state = 0x1f83_d9abu32;
+        let mut next = || {
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
+            state
+        };
+        for (columns, rows) in [(768u32, 37u32), (3840, 262144)] {
+            let blocks = (columns / 256 * rows) as usize;
+            let mut bytes = vec![0u8; blocks * 210];
+            for block in 0..blocks {
+                let b = &mut bytes[block * 210..][..210];
+                b[..208].iter_mut().for_each(|v| *v = next() as u8);
+                let r = next();
+                let d = (((r >> 16) & 0x8000) | (0x0400 + (r & 0x3fff) % 0x3800)) as u16;
+                b[208..].copy_from_slice(&d.to_le_bytes());
+            }
+            let (codes, d) = pack_q6_lanes(&bytes);
+            drop(bytes);
+            let (codes, d) = (stream.clone_htod(&codes).unwrap(), stream.clone_htod(&d).unwrap());
+            let x: Vec<f32> = (0..columns).map(|_| (next() % 65536) as f32 / 32768.0 - 1.0).collect();
+            let x = stream.clone_htod(&x).unwrap();
+            let cap = 30.0f32;
+            let run = |name: &str, grid: u32| {
+                let f = module.load_function(name).unwrap();
+                let mut raw = stream.alloc_zeros::<f32>(rows as usize).unwrap();
+                let mut capped = stream.alloc_zeros::<f32>(rows as usize).unwrap();
+                let mut best = f32::MAX;
+                for _ in 0..5 {
+                    let e0 = stream.record_event(Some(sys::CUevent_flags::CU_EVENT_DEFAULT)).unwrap();
+                    let mut l = stream.launch_builder(&f);
+                    l.arg(&codes).arg(&d).arg(&x).arg(&mut raw).arg(&mut capped).arg(&columns).arg(&rows).arg(&cap);
+                    // SAFETY: buffers sized from rows/columns; bounded rows.
+                    unsafe { l.launch(LaunchConfig { grid_dim: (grid, 1, 1), block_dim: (128, 1, 1), shared_mem_bytes: 0 }) }.unwrap();
+                    let e1 = stream.record_event(Some(sys::CUevent_flags::CU_EVENT_DEFAULT)).unwrap();
+                    best = best.min(e0.elapsed_ms(&e1).unwrap());
+                }
+                (stream.clone_dtoh(&raw).unwrap(), best)
+            };
+            let a = run("q6_matvec_raw_packed", rows.div_ceil(4));
+            let b = run("q6_matvec_raw_packed_dual", rows.div_ceil(8));
+            assert!(a.0.iter().zip(&b.0).all(|(x, y)| x.to_bits() == y.to_bits()), "dual {columns}x{rows}");
+            println!("DUAL {columns}x{rows}: single {:.3}ms dual {:.3}ms", a.1, b.1);
         }
     }
 }
