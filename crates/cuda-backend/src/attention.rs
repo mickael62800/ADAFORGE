@@ -20,6 +20,8 @@ pub(crate) struct AttentionKernel {
 struct SplitAttention {
     /// Heads sharing each key load (1, 2 or 4).
     heads_per_warp: u32,
+    /// cp.async value pipeline: needs 16-byte aligned 32-channel chunks.
+    values_async: bool,
     scores_fn: CudaFunction,
     softmax_fn: CudaFunction,
     values_fn: CudaFunction,
@@ -71,15 +73,21 @@ impl AttentionKernel {
                     .map_err(|e| failure("Attention scindée", e))
             };
             let heads_per_warp = (config.q_heads() / config.kv_heads()).min(4);
+            let values_async = config.width().is_multiple_of(32);
             Some(SplitAttention {
                 heads_per_warp,
+                values_async,
                 scores_fn: load(match heads_per_warp {
                     4 => "attention_split_scores_h4",
                     2 => "attention_split_scores_h2",
                     _ => "attention_split_scores",
                 })?,
                 softmax_fn: load("attention_split_softmax")?,
-                values_fn: load("attention_split_values_async")?,
+                values_fn: load(if values_async {
+                    "attention_split_values_async"
+                } else {
+                    "attention_split_values"
+                })?,
                 scores: stream
                     .alloc_zeros::<f32>(
                         config.q_heads() as usize * super::stack::MAX_CONTEXT as usize,
@@ -289,9 +297,15 @@ impl AttentionKernel {
             Some(st) => l.arg(st),
             None => l.arg(&null),
         };
-        // SAFETY: one 128-thread CTA per (head, 32 channels); scores rows and
-        // V rows are 16-byte aligned (MAX_CONTEXT and widths are multiples of 4).
-        unsafe { l.launch(cfg(qheads, width.div_ceil(32), 128)) }
+        let values_cfg = if split.values_async {
+            cfg(qheads, width / 32, 128)
+        } else {
+            cfg(qheads, width.div_ceil(64), 64)
+        };
+        // SAFETY: async: one 128-thread CTA per (head, 32 channels), width a
+        // multiple of 32 so every 16-byte copy is aligned (MAX_CONTEXT too);
+        // otherwise one thread per (head, channel < width).
+        unsafe { l.launch(values_cfg) }
             .map_err(|e| failure("Valeurs attention", e))?;
         Ok(())
     }
