@@ -327,3 +327,63 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod reference_bits {
+    use cudarc::driver::{CudaContext, LaunchConfig, PushKernelArg};
+    #[test]
+    #[ignore = "Requires RTX 4090 and CUDA"]
+    fn attention_matches_original_kernel_bits() {
+        let ctx = CudaContext::new(0).unwrap();
+        let stream = ctx.default_stream();
+        let source = format!(
+            "{}\n{}",
+            include_str!("../../../kernels/ada/attention.cu"),
+            include_str!("../tests_data/attention_reference.cu")
+        );
+        let ptx = cudarc::nvrtc::compile_ptx_with_opts(
+            source,
+            cudarc::nvrtc::CompileOptions { arch: Some("compute_89"), ..Default::default() },
+        )
+        .unwrap();
+        let m = ctx.load_module(ptx).unwrap();
+        let (new, old) = (m.load_function("causal_attention").unwrap(), m.load_function("ref_causal_attention").unwrap());
+        let mut state = 0x6a09_e667u32;
+        let mut next = |amp: f32| {
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
+            ((state % 65536) as f32 / 32768.0 - 1.0) * amp
+        };
+        let (qheads, kvheads) = (16u32, 8u32);
+        for width in [256u32, 512, 640] {
+            for tokens in [1u32, 7, 8, 9, 16, 17, 44, 63, 64, 130] {
+                for window in [0u32, 16] {
+                    let rnd = |n: u32, amp: f32, next: &mut dyn FnMut(f32) -> f32| (0..n).map(|_| next(amp)).collect::<Vec<_>>();
+                    let q = stream.clone_htod(&rnd(qheads * width, 4.0, &mut next)).unwrap();
+                    let k = stream.clone_htod(&rnd(tokens * kvheads * width, 4.0, &mut next)).unwrap();
+                    let v = stream.clone_htod(&rnd(tokens * kvheads * width, 2.0, &mut next)).unwrap();
+                    let position = tokens - 1;
+                    let scale = 1.0f32 / (width as f32).sqrt();
+                    let run = |f: &cudarc::driver::CudaFunction| {
+                        let mut out = stream.alloc_zeros::<f32>((qheads * width) as usize).unwrap();
+                        let mut l = stream.launch_builder(f);
+                        l.arg(&q).arg(&k).arg(&v).arg(&mut out).arg(&width).arg(&qheads).arg(&kvheads)
+                            .arg(&tokens).arg(&position).arg(&window).arg(&scale);
+                        // SAFETY: q/k/v sized for qheads/kvheads/tokens, shared scores hold `tokens` floats.
+                        unsafe {
+                            l.launch(LaunchConfig { grid_dim: (qheads, 1, 1), block_dim: (256, 1, 1), shared_mem_bytes: tokens * 4 })
+                        }
+                        .unwrap();
+                        stream.clone_dtoh(&out).unwrap()
+                    };
+                    let (a, b) = (run(&new), run(&old));
+                    assert!(
+                        a.iter().zip(&b).all(|(x, y)| x.to_bits() == y.to_bits()),
+                        "width {width} tokens {tokens} window {window}"
+                    );
+                }
+            }
+        }
+    }
+}
