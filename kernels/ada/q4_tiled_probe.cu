@@ -80,3 +80,17 @@ extern "C" __global__ void q4_tiled_gate_gelu(const unsigned short* codes,const 
  const float activation=0.5f*g*(1.0f+tanhf(0.7978845608028654f*(g+0.044715f*g*g*g)));
  output[target]=activation*projected[4+threadIdx.x];}
 }
+
+// Load-time repack of gate/up Q4_0 rows into the tiled layout (pure byte
+// moves, identical to the former host loop). One thread per (row, block).
+extern "C" __global__ void q4_tile_repack(const unsigned char* gate,const unsigned char* up,unsigned short* codes,
+    unsigned short* scales,unsigned int rows,unsigned int blocks){
+    const unsigned long long i=(unsigned long long)blockIdx.x*blockDim.x+threadIdx.x;
+    if(i>=(unsigned long long)rows*2*blocks)return;
+    const unsigned int row=(unsigned int)(i/blocks),b=(unsigned int)(i%blocks);
+    const unsigned char* p=(row<rows?gate:up)+((unsigned long long)(row%rows)*blocks+b)*18;
+    const unsigned long long tile=(unsigned long long)(row/4)*blocks+b;
+    scales[tile*4+row%4]=(unsigned short)(p[0]|(p[1]<<8));
+    #pragma unroll
+    for(unsigned int w=0;w<8;++w)codes[(tile*8+w)*4+row%4]=(unsigned short)(p[2+w*2]|(p[3+w*2]<<8));
+}

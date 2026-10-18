@@ -138,33 +138,43 @@ impl FfnKernel {
             .unwrap_or(ffn.width() == 3840 && ffn.intermediate() == 15360);
         let tiled_gate = if !experimental_q8 && use_tiled {
             let matrices = ffn.matrices();
-            let rows = matrices[0].rows() as usize;
-            let blocks = matrices[0].columns() as usize / 32;
-            let tiles = (rows * 2).div_ceil(4) * blocks;
-            let mut codes = vec![0u16; tiles * 32];
-            let mut scales = vec![0u16; tiles * 4];
-            for row in 0..rows * 2 {
-                let bytes = matrices[row / rows].bytes();
-                for b in 0..blocks {
-                    let p = ((row % rows) * blocks + b) * 18;
-                    let tile = (row / 4) * blocks + b;
-                    scales[tile * 4 + row % 4] = u16::from_le_bytes([bytes[p], bytes[p + 1]]);
-                    for word in 0..8 {
-                        let offset = p + 2 + word * 2;
-                        codes[(tile * 8 + word) * 4 + row % 4] =
-                            u16::from_le_bytes([bytes[offset], bytes[offset + 1]]);
-                    }
-                }
+            let rows = matrices[0].rows();
+            let blocks = matrices[0].columns() / 32;
+            let tiles = ((rows * 2).div_ceil(4) * blocks) as usize;
+            // Repacked on the GPU (pure byte moves); padding rows stay zero.
+            let gate_raw = stream
+                .clone_htod(matrices[0].bytes())
+                .map_err(|e| failure("Gate brute", e))?;
+            let up_raw = stream
+                .clone_htod(matrices[1].bytes())
+                .map_err(|e| failure("Up brute", e))?;
+            let mut codes = stream
+                .alloc_zeros::<u16>(tiles * 32)
+                .map_err(|e| failure("Tiled codes", e))?;
+            let mut scales = stream
+                .alloc_zeros::<u16>(tiles * 4)
+                .map_err(|e| failure("Tiled scales", e))?;
+            let repack = load("q4_tile_repack")?;
+            let total = rows * 2 * blocks;
+            let mut launch = stream.launch_builder(&repack);
+            launch
+                .arg(&gate_raw)
+                .arg(&up_raw)
+                .arg(&mut codes)
+                .arg(&mut scales)
+                .arg(&rows)
+                .arg(&blocks);
+            // SAFETY: raw buffers hold rows*blocks Q4_0 blocks each; outputs sized
+            // for ceil(2*rows/4) tiles; one thread per (row, block), bounded.
+            unsafe {
+                launch.launch(LaunchConfig {
+                    grid_dim: (total.div_ceil(256), 1, 1),
+                    block_dim: (256, 1, 1),
+                    shared_mem_bytes: 0,
+                })
             }
-            Some((
-                load("q4_tiled_gate")?,
-                stream
-                    .clone_htod(&codes)
-                    .map_err(|e| failure("Tiled codes", e))?,
-                stream
-                    .clone_htod(&scales)
-                    .map_err(|e| failure("Tiled scales", e))?,
-            ))
+            .map_err(|e| failure("Repack tuiles", e))?;
+            Some((load("q4_tiled_gate")?, codes, scales))
         } else {
             None
         };
