@@ -113,3 +113,21 @@ extern "C" __global__ void rms_residual_scale(const float* down,const float* res
     for(unsigned int k=0;k<16;++k){const unsigned int i=lane+256*k;
         if(i<width){const float post=__fmul_rn(v[k]*inv,a[k]);output[i]=(post+r[k])*scale; /* no FMA */}}
 }
+// rms_residual_scale followed by the next layer's input norm on the result
+// (still in registers): next = rms(output) * s_next, computed exactly as
+// rms_norm does on the stored output. Bit-identical to the two kernels.
+extern "C" __global__ void rms_residual_scale_norm(const float* down,const float* residual,const float* s,
+    float* output,unsigned int width,float eps,float scale,const float* s_next,float* next,float eps_next){
+    const unsigned int thread=threadIdx.x,lane=(thread&7)*32+(thread>>3);
+    float v[16],r[16],a[16],b[16];
+    #pragma unroll
+    for(unsigned int k=0;k<16;++k){const unsigned int i=lane+256*k;const bool ok=i<width;
+        v[k]=ok?down[i]:0.0f;r[k]=ok?residual[i]:0.0f;a[k]=ok?s[i]:0.0f;b[k]=ok?s_next[i]:0.0f;}
+    const float inv=rms_inverse_cached(v,lane,width,eps);
+    #pragma unroll
+    for(unsigned int k=0;k<16;++k){const unsigned int i=lane+256*k;
+        if(i<width){const float post=__fmul_rn(v[k]*inv,a[k]);v[k]=(post+r[k])*scale;output[i]=v[k];}else v[k]=0.0f;}
+    const float inv2=rms_inverse_cached(v,lane,width,eps_next);
+    #pragma unroll
+    for(unsigned int k=0;k<16;++k){const unsigned int i=lane+256*k;if(i<width)next[i]=(v[k]*inv2)*b[k];}
+}

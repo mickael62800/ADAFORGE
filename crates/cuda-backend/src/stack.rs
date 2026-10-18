@@ -238,15 +238,31 @@ impl ResidentLayer {
         position: u32,
         state: Option<&CudaSlice<u32>>,
     ) -> Result<(), DiagnosticError> {
-        norm(
-            &self.stream,
-            &self.rms,
-            input,
-            &self.scales[0],
-            &mut self.normalized,
-            self.width,
-            self.eps[0],
-        )?;
+        self.launch_body_chained(input, position, state, false, None)
+            .map(|_| ())
+    }
+    /// `prenormed`: self.normalized already holds this layer's input norm.
+    /// `next`: also compute the next layer's input norm in the last kernel;
+    /// returns whether that happened.
+    fn launch_body_chained(
+        &mut self,
+        input: &CudaSlice<f32>,
+        position: u32,
+        state: Option<&CudaSlice<u32>>,
+        prenormed: bool,
+        next: Option<super::ffn::NextNorm<'_>>,
+    ) -> Result<bool, DiagnosticError> {
+        if !prenormed {
+            norm(
+                &self.stream,
+                &self.rms,
+                input,
+                &self.scales[0],
+                &mut self.normalized,
+                self.width,
+                self.eps[0],
+            )?;
+        }
         let total =
             self.rows[0] + self.rows[1] + if self.shared_kv != 0 { 0 } else { self.rows[2] };
         let mut launch = self.stream.launch_builder(&self.project_qkv);
@@ -287,12 +303,15 @@ impl ResidentLayer {
             let (scales, eps, normalized) = self.ffn.pre_norm_parts();
             self.output_branch
                 .run_fused(self.attention.output(), input, scales, eps, normalized)?;
+            if let Some(next) = next {
+                return self.ffn.run_prenormed_chained(self.output_branch.output(), next);
+            }
             self.ffn.run_prenormed(self.output_branch.output())?;
         } else {
             self.output_branch.run(self.attention.output(), input)?;
             self.ffn.run(self.output_branch.output())?;
         }
-        Ok(())
+        Ok(false)
     }
     /// Q/K/V preparation, KV cache write and attention for one token, reading
     /// self.raw and leaving the result in self.attention.output().
@@ -1061,10 +1080,24 @@ impl CudaGenerationSession {
             .map_err(|e| failure("Début capture CUDA", e))?;
         let captured = (|| {
             self.head.embed_graph(&self.state, &mut self.input)?;
-            self.layers[0].launch_body(&self.input, 0, Some(&self.state))?;
-            for index in 1..self.layers.len() {
-                let (previous, next) = self.layers.split_at_mut(index);
-                next[0].launch_body(previous[index - 1].output(), 0, Some(&self.state))?;
+            // Each layer's last kernel also normalizes the next layer's input
+            // (bit-identical to the separate norm), saving one launch per layer.
+            let count = self.layers.len();
+            let mut prenormed = false;
+            for index in 0..count {
+                let (left, right) = self.layers.split_at_mut(index + 1);
+                let (before, current) = left.split_at_mut(index);
+                let input = if index == 0 { &self.input } else { before[index - 1].output() };
+                let next = right
+                    .first_mut()
+                    .map(|n| (&n.scales[0], n.eps[0], &mut n.normalized));
+                prenormed = current[0].launch_body_chained(
+                    input,
+                    0,
+                    Some(&self.state),
+                    prenormed,
+                    next,
+                )?;
             }
             Ok::<(), DiagnosticError>(())
         })();

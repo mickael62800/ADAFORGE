@@ -33,7 +33,11 @@ pub(crate) struct FfnKernel {
     post_eps: f32,
     layer_scale: f32,
     fused_post: CudaFunction,
+    fused_post_norm: CudaFunction,
 }
+/// Next layer's input norm, computed by this layer's last kernel:
+/// (scales, epsilon, target buffer).
+pub(crate) type NextNorm<'a> = (&'a CudaSlice<f32>, f32, &'a mut CudaSlice<f32>);
 /// Fused norm/residual kernels (bit-identical). `ADAFORGE_FUSED_RMS=0` disables them.
 pub(crate) fn fused_rms() -> bool {
     std::env::var("ADAFORGE_FUSED_RMS").as_deref() != Ok("0")
@@ -138,6 +142,7 @@ impl FfnKernel {
         let gelu = load("gelu_gate")?;
         let residual = load("ffn_residual_scale")?;
         let fused_post = load("rms_residual_scale")?;
+        let fused_post_norm = load("rms_residual_scale_norm")?;
         // Qualified only for Gemma's fixed dense FFN geometry. Explicit 0 keeps
         // the native path available for regression checks; 1 forces the prototype.
         let use_tiled = std::env::var("ADAFORGE_EXPERIMENTAL_TILED_GATE")
@@ -257,6 +262,7 @@ impl FfnKernel {
             pre_eps: ffn.pre().epsilon(),
             post_eps: ffn.post().epsilon(),
             fused_post,
+            fused_post_norm,
             layer_scale: ffn.layer_scale(),
         })
     }
@@ -265,13 +271,30 @@ impl FfnKernel {
         (&self.pre_scale, self.pre_eps, &mut self.normalized)
     }
     pub(crate) fn run(&mut self, input: &CudaSlice<f32>) -> Result<(), DiagnosticError> {
-        self.run_inner(input, false)
+        self.run_inner(input, false, None)
     }
     /// `normalized` was already written by the producer (see `pre_norm_parts`).
     pub(crate) fn run_prenormed(&mut self, input: &CudaSlice<f32>) -> Result<(), DiagnosticError> {
-        self.run_inner(input, true)
+        self.run_inner(input, true, None)
     }
-    fn run_inner(&mut self, input: &CudaSlice<f32>, prenormed: bool) -> Result<(), DiagnosticError> {
+    /// Like `run_prenormed`, and also writes the next layer's input norm.
+    /// Returns false (nothing launched for the norm) when the fused post path
+    /// is not available; the caller must then normalize itself.
+    pub(crate) fn run_prenormed_chained(
+        &mut self,
+        input: &CudaSlice<f32>,
+        next: NextNorm<'_>,
+    ) -> Result<bool, DiagnosticError> {
+        let chained = fused_rms() && self.width <= 4096 && next.0.len() == self.width as usize;
+        self.run_inner(input, true, if chained { Some(next) } else { None })?;
+        Ok(chained)
+    }
+    fn run_inner(
+        &mut self,
+        input: &CudaSlice<f32>,
+        prenormed: bool,
+        next: Option<NextNorm<'_>>,
+    ) -> Result<(), DiagnosticError> {
         if input.len() != self.width as usize || input.context() != self.stream.context() {
             return Err(DiagnosticError("Entrée FFN incompatible".into()));
         }
@@ -420,6 +443,31 @@ impl FfnKernel {
                 self.intermediate,
                 self.width,
             )?;
+        }
+        if let Some((next_scales, next_eps, next_out)) = next {
+            let mut launch = self.stream.launch_builder(&self.fused_post_norm);
+            launch
+                .arg(&self.down)
+                .arg(input)
+                .arg(&self.post_scale)
+                .arg(&mut self.output)
+                .arg(&self.width)
+                .arg(&self.post_eps)
+                .arg(&self.layer_scale)
+                .arg(next_scales)
+                .arg(&mut *next_out)
+                .arg(&next_eps);
+            // SAFETY: width <= 4096 vectors (checked by the caller), one 256-thread
+            // block, outputs distinct from every input.
+            unsafe {
+                launch.launch(LaunchConfig {
+                    grid_dim: (1, 1, 1),
+                    block_dim: (256, 1, 1),
+                    shared_mem_bytes: 0,
+                })
+            }
+            .map_err(|e| failure("Post-norme FFN + norme suivante", e))?;
+            return Ok(());
         }
         if fused_rms() && self.width <= 4096 {
             let mut launch = self.stream.launch_builder(&self.fused_post);
