@@ -1,0 +1,365 @@
+{
+  "scope": "Kernel-only alternating measurements; 20 timed repeats after 2 warmups; cold denotes 128 MiB eviction pass outside timing, not measured cache residency. Split uses native q4_row FP32 tree; Q and gate bitwise checked against native. Production default unchanged.",
+  "samples": [
+    {
+      "tensor": "blk.0.ffn_gate.weight",
+      "case": 0,
+      "cold": false,
+      "native_ms": 0.032768,
+      "tiled_ms": 0.038832,
+      "split_ms": 0.031744,
+      "lossless": true,
+      "oracle": true
+    },
+    {
+      "tensor": "blk.0.ffn_gate.weight",
+      "case": 0,
+      "cold": true,
+      "native_ms": 0.07168,
+      "tiled_ms": 0.073728,
+      "split_ms": 0.065024,
+      "lossless": true,
+      "oracle": true
+    },
+    {
+      "tensor": "blk.0.ffn_gate.weight",
+      "case": 1,
+      "cold": false,
+      "native_ms": 0.032704,
+      "tiled_ms": 0.038896002,
+      "split_ms": 0.032080002,
+      "lossless": true,
+      "oracle": true
+    },
+    {
+      "tensor": "blk.0.ffn_gate.weight",
+      "case": 1,
+      "cold": true,
+      "native_ms": 0.070656,
+      "tiled_ms": 0.074752,
+      "split_ms": 0.063904,
+      "lossless": true,
+      "oracle": true
+    },
+    {
+      "tensor": "blk.0.ffn_gate.weight",
+      "case": 2,
+      "cold": false,
+      "native_ms": 0.032576,
+      "tiled_ms": 0.038912,
+      "split_ms": 0.031744,
+      "lossless": true,
+      "oracle": true
+    },
+    {
+      "tensor": "blk.0.ffn_gate.weight",
+      "case": 2,
+      "cold": true,
+      "native_ms": 0.070064,
+      "tiled_ms": 0.07328001,
+      "split_ms": 0.064512,
+      "lossless": true,
+      "oracle": true
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 0,
+      "cold": false,
+      "native_ms": 0.030624,
+      "tiled_ms": 0.050848,
+      "split_ms": 0.033792,
+      "lossless": true,
+      "oracle": true
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 0,
+      "cold": true,
+      "native_ms": 0.065536,
+      "tiled_ms": 0.114688,
+      "split_ms": 0.06656,
+      "lossless": true,
+      "oracle": true
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 1,
+      "cold": false,
+      "native_ms": 0.03072,
+      "tiled_ms": 0.050256,
+      "split_ms": 0.033792,
+      "lossless": true,
+      "oracle": true
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 1,
+      "cold": true,
+      "native_ms": 0.065536,
+      "tiled_ms": 0.114688,
+      "split_ms": 0.067072004,
+      "lossless": true,
+      "oracle": true
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 2,
+      "cold": false,
+      "native_ms": 0.03072,
+      "tiled_ms": 0.050272,
+      "split_ms": 0.033792,
+      "lossless": true,
+      "oracle": true
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 2,
+      "cold": true,
+      "native_ms": 0.065616,
+      "tiled_ms": 0.114688,
+      "split_ms": 0.067184,
+      "lossless": true,
+      "oracle": true
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 0,
+      "cold": false,
+      "native_ms": 0.011264,
+      "tiled_ms": 0.01536,
+      "split_ms": 0.011248,
+      "lossless": true,
+      "oracle": true
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 0,
+      "cold": true,
+      "native_ms": 0.024576,
+      "tiled_ms": 0.041440003,
+      "split_ms": 0.024576,
+      "lossless": true,
+      "oracle": true
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 1,
+      "cold": false,
+      "native_ms": 0.011264,
+      "tiled_ms": 0.01536,
+      "split_ms": 0.011264,
+      "lossless": true,
+      "oracle": true
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 1,
+      "cold": true,
+      "native_ms": 0.024576,
+      "tiled_ms": 0.04104,
+      "split_ms": 0.0236,
+      "lossless": true,
+      "oracle": true
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 2,
+      "cold": false,
+      "native_ms": 0.011264,
+      "tiled_ms": 0.015376,
+      "split_ms": 0.011264,
+      "lossless": true,
+      "oracle": true
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 2,
+      "cold": true,
+      "native_ms": 0.024576,
+      "tiled_ms": 0.04104,
+      "split_ms": 0.024576,
+      "lossless": true,
+      "oracle": true
+    },
+    {
+      "tensor": "synthetic-1x96",
+      "case": 0,
+      "cold": false,
+      "native_ms": 0.003072,
+      "tiled_ms": 0.003408,
+      "split_ms": 0.003072,
+      "lossless": true,
+      "oracle": true
+    },
+    {
+      "tensor": "synthetic-1x96",
+      "case": 0,
+      "cold": true,
+      "native_ms": 0.004096,
+      "tiled_ms": 0.004096,
+      "split_ms": 0.004096,
+      "lossless": true,
+      "oracle": true
+    },
+    {
+      "tensor": "synthetic-1x96",
+      "case": 1,
+      "cold": false,
+      "native_ms": 0.0038080001,
+      "tiled_ms": 0.004016,
+      "split_ms": 0.0038239998,
+      "lossless": true,
+      "oracle": true
+    },
+    {
+      "tensor": "synthetic-1x96",
+      "case": 1,
+      "cold": true,
+      "native_ms": 0.004096,
+      "tiled_ms": 0.004096,
+      "split_ms": 0.004096,
+      "lossless": true,
+      "oracle": true
+    },
+    {
+      "tensor": "synthetic-1x96",
+      "case": 2,
+      "cold": false,
+      "native_ms": 0.0034079999,
+      "tiled_ms": 0.003472,
+      "split_ms": 0.003424,
+      "lossless": true,
+      "oracle": true
+    },
+    {
+      "tensor": "synthetic-1x96",
+      "case": 2,
+      "cold": true,
+      "native_ms": 0.004032,
+      "tiled_ms": 0.004096,
+      "split_ms": 0.004096,
+      "lossless": true,
+      "oracle": true
+    },
+    {
+      "tensor": "synthetic-5x96",
+      "case": 0,
+      "cold": false,
+      "native_ms": 0.003424,
+      "tiled_ms": 0.003072,
+      "split_ms": 0.0032159998,
+      "lossless": true,
+      "oracle": true
+    },
+    {
+      "tensor": "synthetic-5x96",
+      "case": 0,
+      "cold": true,
+      "native_ms": 0.004096,
+      "tiled_ms": 0.004096,
+      "split_ms": 0.004096,
+      "lossless": true,
+      "oracle": true
+    },
+    {
+      "tensor": "synthetic-5x96",
+      "case": 1,
+      "cold": false,
+      "native_ms": 0.003072,
+      "tiled_ms": 0.003792,
+      "split_ms": 0.003728,
+      "lossless": true,
+      "oracle": true
+    },
+    {
+      "tensor": "synthetic-5x96",
+      "case": 1,
+      "cold": true,
+      "native_ms": 0.004096,
+      "tiled_ms": 0.004096,
+      "split_ms": 0.004096,
+      "lossless": true,
+      "oracle": true
+    },
+    {
+      "tensor": "synthetic-5x96",
+      "case": 2,
+      "cold": false,
+      "native_ms": 0.0033920002,
+      "tiled_ms": 0.0038239998,
+      "split_ms": 0.003072,
+      "lossless": true,
+      "oracle": true
+    },
+    {
+      "tensor": "synthetic-5x96",
+      "case": 2,
+      "cold": true,
+      "native_ms": 0.004096,
+      "tiled_ms": 0.004096,
+      "split_ms": 0.00392,
+      "lossless": true,
+      "oracle": true
+    },
+    {
+      "tensor": "synthetic-9x96",
+      "case": 0,
+      "cold": false,
+      "native_ms": 0.003488,
+      "tiled_ms": 0.003072,
+      "split_ms": 0.0033920002,
+      "lossless": true,
+      "oracle": true
+    },
+    {
+      "tensor": "synthetic-9x96",
+      "case": 0,
+      "cold": true,
+      "native_ms": 0.004096,
+      "tiled_ms": 0.004096,
+      "split_ms": 0.004096,
+      "lossless": true,
+      "oracle": true
+    },
+    {
+      "tensor": "synthetic-9x96",
+      "case": 1,
+      "cold": false,
+      "native_ms": 0.003776,
+      "tiled_ms": 0.003856,
+      "split_ms": 0.003808,
+      "lossless": true,
+      "oracle": true
+    },
+    {
+      "tensor": "synthetic-9x96",
+      "case": 1,
+      "cold": true,
+      "native_ms": 0.004096,
+      "tiled_ms": 0.004096,
+      "split_ms": 0.004096,
+      "lossless": true,
+      "oracle": true
+    },
+    {
+      "tensor": "synthetic-9x96",
+      "case": 2,
+      "cold": false,
+      "native_ms": 0.003872,
+      "tiled_ms": 0.004048,
+      "split_ms": 0.003072,
+      "lossless": true,
+      "oracle": true
+    },
+    {
+      "tensor": "synthetic-9x96",
+      "case": 2,
+      "cold": true,
+      "native_ms": 0.004096,
+      "tiled_ms": 0.004096,
+      "split_ms": 0.004096,
+      "lossless": true,
+      "oracle": true
+    }
+  ]
+}

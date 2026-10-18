@@ -1,0 +1,18 @@
+{
+  "capture": "profile-current-kparallel.nsys-rep",
+  "scope": "Warmup plus measured request, prompt and decode combined; CUDA Graph node tracing. Not a pure decode or DRAM-bandwidth measurement.",
+  "precision": "FP32 activations and KV, default Q4_0/Q6_K weights",
+  "ffn_carveout_override": null,
+  "kernel_time_percent": {
+    "q4_gate_up": 38.3,
+    "q4_matvec_kparallel": 17.6,
+    "q4_qkv": 10.8,
+    "rms_norm": 10.5,
+    "q6_matvec": 7.1,
+    "q4_matvec": 6.4,
+    "attention_dynamic": 6.1
+  },
+  "q4_total_percent": 73.1,
+  "limitations": "Large occasional kernel latency spikes; shares describe this trace only. Separate decode-only and llama.cpp traces remain required.",
+  "next_priority": "Gate/up Q4 tiled loads and activation reuse with fixed group-32 scales, before long-context KV quantization or speculative decoding."
+}

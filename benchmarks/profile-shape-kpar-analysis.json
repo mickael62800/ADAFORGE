@@ -1,0 +1,251 @@
+{
+  "database": "D:\\ADAFORGE\\benchmarks\\profile-shape-kpar-decode.sqlite",
+  "anchor_regex": "^greedy_final$",
+  "anchor_count": 24,
+  "window_start_ns": 95196468,
+  "window_end_ns": 433107111,
+  "step_count": 23,
+  "steps": [
+    {
+      "wall_ms": 16.217083,
+      "tracked_gpu_ms": 15.72092,
+      "uncovered_ms": 0.496163
+    },
+    {
+      "wall_ms": 13.894862,
+      "tracked_gpu_ms": 13.428487,
+      "uncovered_ms": 0.466375
+    },
+    {
+      "wall_ms": 15.715705,
+      "tracked_gpu_ms": 15.239703,
+      "uncovered_ms": 0.476002
+    },
+    {
+      "wall_ms": 14.073904,
+      "tracked_gpu_ms": 13.60203,
+      "uncovered_ms": 0.471874
+    },
+    {
+      "wall_ms": 14.901844,
+      "tracked_gpu_ms": 14.412845,
+      "uncovered_ms": 0.488999
+    },
+    {
+      "wall_ms": 14.001743,
+      "tracked_gpu_ms": 13.441096,
+      "uncovered_ms": 0.560647
+    },
+    {
+      "wall_ms": 14.213424,
+      "tracked_gpu_ms": 13.770892,
+      "uncovered_ms": 0.442532
+    },
+    {
+      "wall_ms": 15.118165,
+      "tracked_gpu_ms": 14.265902,
+      "uncovered_ms": 0.852263
+    },
+    {
+      "wall_ms": 13.792462,
+      "tracked_gpu_ms": 13.371721,
+      "uncovered_ms": 0.420741
+    },
+    {
+      "wall_ms": 14.350961,
+      "tracked_gpu_ms": 13.98168,
+      "uncovered_ms": 0.369281
+    },
+    {
+      "wall_ms": 13.914031,
+      "tracked_gpu_ms": 13.413004,
+      "uncovered_ms": 0.501027
+    },
+    {
+      "wall_ms": 16.486845,
+      "tracked_gpu_ms": 15.832344,
+      "uncovered_ms": 0.654501
+    },
+    {
+      "wall_ms": 14.179312,
+      "tracked_gpu_ms": 13.692077,
+      "uncovered_ms": 0.487235
+    },
+    {
+      "wall_ms": 14.98594,
+      "tracked_gpu_ms": 14.63253,
+      "uncovered_ms": 0.35341
+    },
+    {
+      "wall_ms": 14.013231,
+      "tracked_gpu_ms": 13.487979,
+      "uncovered_ms": 0.525252
+    },
+    {
+      "wall_ms": 15.035765,
+      "tracked_gpu_ms": 14.575442,
+      "uncovered_ms": 0.460323
+    },
+    {
+      "wall_ms": 14.126704,
+      "tracked_gpu_ms": 13.667948,
+      "uncovered_ms": 0.458756
+    },
+    {
+      "wall_ms": 14.319281,
+      "tracked_gpu_ms": 13.584237,
+      "uncovered_ms": 0.735044
+    },
+    {
+      "wall_ms": 14.833172,
+      "tracked_gpu_ms": 14.346385,
+      "uncovered_ms": 0.486787
+    },
+    {
+      "wall_ms": 14.344112,
+      "tracked_gpu_ms": 13.868141,
+      "uncovered_ms": 0.475971
+    },
+    {
+      "wall_ms": 16.396093,
+      "tracked_gpu_ms": 15.061235,
+      "uncovered_ms": 1.334858
+    },
+    {
+      "wall_ms": 14.381233,
+      "tracked_gpu_ms": 13.870507,
+      "uncovered_ms": 0.510726
+    },
+    {
+      "wall_ms": 14.614771,
+      "tracked_gpu_ms": 13.390442,
+      "uncovered_ms": 1.224329
+    }
+  ],
+  "top_kernels": [
+    {
+      "kernel": "q4_tiled_gate",
+      "instances": 1104,
+      "sum_ms": 107.334012,
+      "median_us": 87.424,
+      "max_us": 851.781,
+      "kernel_sum_percent": 33.063905791309075
+    },
+    {
+      "kernel": "q4_matvec_kparallel",
+      "instances": 2208,
+      "sum_ms": 74.260132,
+      "median_us": 43.4565,
+      "max_us": 793.989,
+      "kernel_sum_percent": 22.875600778792993
+    },
+    {
+      "kernel": "q6_matvec",
+      "instances": 23,
+      "sum_ms": 42.816562,
+      "median_us": 1564.713,
+      "max_us": 3531.828,
+      "kernel_sum_percent": 13.189507649036207
+    },
+    {
+      "kernel": "rms_norm",
+      "instances": 7751,
+      "sum_ms": 32.481827,
+      "median_us": 5.728,
+      "max_us": 499.075,
+      "kernel_sum_percent": 10.005924942576446
+    },
+    {
+      "kernel": "q4_qkv_kparallel",
+      "instances": 1104,
+      "sum_ms": 29.977773,
+      "median_us": 23.712,
+      "max_us": 754.756,
+      "kernel_sum_percent": 9.234558960725783
+    },
+    {
+      "kernel": "attention_dynamic",
+      "instances": 1104,
+      "sum_ms": 28.113255,
+      "median_us": 23.632,
+      "max_us": 465.027,
+      "kernel_sum_percent": 8.660200038055493
+    },
+    {
+      "kernel": "rope_dynamic",
+      "instances": 2208,
+      "sum_ms": 5.241422,
+      "median_us": 2.3525,
+      "max_us": 2.592,
+      "kernel_sum_percent": 1.614603609715947
+    },
+    {
+      "kernel": "ffn_residual_scale",
+      "instances": 1104,
+      "sum_ms": 1.150048,
+      "median_us": 1.008,
+      "max_us": 2.4,
+      "kernel_sum_percent": 0.3542686797870131
+    },
+    {
+      "kernel": "cache_dynamic",
+      "instances": 1104,
+      "sum_ms": 1.095627,
+      "median_us": 0.992,
+      "max_us": 1.025,
+      "kernel_sum_percent": 0.3375044614042247
+    },
+    {
+      "kernel": "gelu_gate",
+      "instances": 1104,
+      "sum_ms": 1.028005,
+      "median_us": 0.928,
+      "max_us": 1.344,
+      "kernel_sum_percent": 0.3166737163704892
+    },
+    {
+      "kernel": "vector_add",
+      "instances": 1104,
+      "sum_ms": 0.953826,
+      "median_us": 0.864,
+      "max_us": 1.28,
+      "kernel_sum_percent": 0.29382310804986184
+    },
+    {
+      "kernel": "greedy_partial",
+      "instances": 23,
+      "sum_ms": 0.094528,
+      "median_us": 4.096,
+      "max_us": 4.256,
+      "kernel_sum_percent": 0.029119053955058198
+    },
+    {
+      "kernel": "greedy_final",
+      "instances": 23,
+      "sum_ms": 0.050402,
+      "median_us": 2.177,
+      "max_us": 2.24,
+      "kernel_sum_percent": 0.015526178036590675
+    },
+    {
+      "kernel": "lookup_dynamic",
+      "instances": 23,
+      "sum_ms": 0.028512,
+      "median_us": 1.216,
+      "max_us": 1.44,
+      "kernel_sum_percent": 0.008783032184819517
+    }
+  ],
+  "median_step_ms": {
+    "wall_ms": 14.350961,
+    "tracked_gpu_ms": 13.868141,
+    "uncovered_ms": 0.487235
+  },
+  "max_anchor_gap_ms": 16.486845,
+  "notes": [
+    "Anchor intervals are not HTTP or engine token-ready measurements.",
+    "Tracked GPU time is a union of recorded kernels/copies/memsets, without double counting.",
+    "Uncovered time has no causal attribution: host work, driver scheduling and untracked work may contribute.",
+    "Per-kernel percentages use summed kernel durations, not end-to-end wall time."
+  ]
+}

@@ -1,0 +1,22 @@
+[workspace]
+members = ["crates/domain", "crates/application", "crates/model-formats", "crates/cuda-backend", "crates/server", "crates/cli", "crates/app"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace.dependencies]
+adaforge-domain = { path = "crates/domain" }
+adaforge-application = { path = "crates/application" }
+adaforge-model-formats = { path = "crates/model-formats" }
+adaforge-cuda-backend = { path = "crates/cuda-backend" }
+adaforge-server = { path = "crates/server" }
+adaforge-cli = { path = "crates/cli" }
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+undocumented_unsafe_blocks = "deny"

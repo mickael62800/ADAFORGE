@@ -1,0 +1,259 @@
+{
+  "database": "D:\\ADAFORGE\\benchmarks\\profile-shape-native-decode.sqlite",
+  "anchor_regex": "^greedy_final$",
+  "anchor_count": 24,
+  "window_start_ns": 99743016,
+  "window_end_ns": 430418502,
+  "step_count": 23,
+  "steps": [
+    {
+      "wall_ms": 13.123944,
+      "tracked_gpu_ms": 12.652064,
+      "uncovered_ms": 0.47188
+    },
+    {
+      "wall_ms": 13.947533,
+      "tracked_gpu_ms": 13.259368,
+      "uncovered_ms": 0.688165
+    },
+    {
+      "wall_ms": 14.806706,
+      "tracked_gpu_ms": 13.997128,
+      "uncovered_ms": 0.809578
+    },
+    {
+      "wall_ms": 13.489258,
+      "tracked_gpu_ms": 13.001096,
+      "uncovered_ms": 0.488162
+    },
+    {
+      "wall_ms": 14.073133,
+      "tracked_gpu_ms": 13.674119,
+      "uncovered_ms": 0.399014
+    },
+    {
+      "wall_ms": 13.316522,
+      "tracked_gpu_ms": 12.768261,
+      "uncovered_ms": 0.548261
+    },
+    {
+      "wall_ms": 13.81982,
+      "tracked_gpu_ms": 13.354024,
+      "uncovered_ms": 0.465796
+    },
+    {
+      "wall_ms": 13.334025,
+      "tracked_gpu_ms": 12.903266,
+      "uncovered_ms": 0.430759
+    },
+    {
+      "wall_ms": 14.895474,
+      "tracked_gpu_ms": 14.431694,
+      "uncovered_ms": 0.46378
+    },
+    {
+      "wall_ms": 14.926579,
+      "tracked_gpu_ms": 13.756203,
+      "uncovered_ms": 1.170376
+    },
+    {
+      "wall_ms": 15.214644,
+      "tracked_gpu_ms": 14.520877,
+      "uncovered_ms": 0.693767
+    },
+    {
+      "wall_ms": 14.214286,
+      "tracked_gpu_ms": 13.709799,
+      "uncovered_ms": 0.504487
+    },
+    {
+      "wall_ms": 14.587888,
+      "tracked_gpu_ms": 13.835436,
+      "uncovered_ms": 0.752452
+    },
+    {
+      "wall_ms": 14.529968,
+      "tracked_gpu_ms": 14.083565,
+      "uncovered_ms": 0.446403
+    },
+    {
+      "wall_ms": 15.291989,
+      "tracked_gpu_ms": 14.432394,
+      "uncovered_ms": 0.859595
+    },
+    {
+      "wall_ms": 14.429551,
+      "tracked_gpu_ms": 13.918825,
+      "uncovered_ms": 0.510726
+    },
+    {
+      "wall_ms": 15.574038,
+      "tracked_gpu_ms": 14.78235,
+      "uncovered_ms": 0.791688
+    },
+    {
+      "wall_ms": 14.210926,
+      "tracked_gpu_ms": 13.665002,
+      "uncovered_ms": 0.545924
+    },
+    {
+      "wall_ms": 16.012408,
+      "tracked_gpu_ms": 15.279121,
+      "uncovered_ms": 0.733287
+    },
+    {
+      "wall_ms": 14.140782,
+      "tracked_gpu_ms": 13.703179,
+      "uncovered_ms": 0.437603
+    },
+    {
+      "wall_ms": 14.401328,
+      "tracked_gpu_ms": 13.972714,
+      "uncovered_ms": 0.428614
+    },
+    {
+      "wall_ms": 13.843308,
+      "tracked_gpu_ms": 13.217351,
+      "uncovered_ms": 0.625957
+    },
+    {
+      "wall_ms": 14.491376,
+      "tracked_gpu_ms": 13.999405,
+      "uncovered_ms": 0.491971
+    }
+  ],
+  "top_kernels": [
+    {
+      "kernel": "q4_tiled_gate",
+      "instances": 1104,
+      "sum_ms": 104.452283,
+      "median_us": 87.552,
+      "max_us": 740.293,
+      "kernel_sum_percent": 32.96178050692059
+    },
+    {
+      "kernel": "q4_matvec_kparallel",
+      "instances": 1104,
+      "sum_ms": 53.892392,
+      "median_us": 44.288,
+      "max_us": 588.291,
+      "kernel_sum_percent": 17.006705311524147
+    },
+    {
+      "kernel": "q6_matvec",
+      "instances": 23,
+      "sum_ms": 37.807216,
+      "median_us": 1558.985,
+      "max_us": 3059.056,
+      "kernel_sum_percent": 11.930741191839113
+    },
+    {
+      "kernel": "q4_qkv",
+      "instances": 1104,
+      "sum_ms": 31.708915,
+      "median_us": 27.776,
+      "max_us": 538.627,
+      "kernel_sum_percent": 10.006313565617345
+    },
+    {
+      "kernel": "rms_norm",
+      "instances": 7751,
+      "sum_ms": 31.580791,
+      "median_us": 5.728,
+      "max_us": 316.13,
+      "kernel_sum_percent": 9.965881752694035
+    },
+    {
+      "kernel": "attention_dynamic",
+      "instances": 1104,
+      "sum_ms": 27.911637,
+      "median_us": 23.552,
+      "max_us": 337.666,
+      "kernel_sum_percent": 8.808014779177622
+    },
+    {
+      "kernel": "q4_matvec",
+      "instances": 1104,
+      "sum_ms": 19.054408,
+      "median_us": 14.08,
+      "max_us": 447.235,
+      "kernel_sum_percent": 6.012958225004156
+    },
+    {
+      "kernel": "rope_dynamic",
+      "instances": 2208,
+      "sum_ms": 5.564882,
+      "median_us": 2.384,
+      "max_us": 319.874,
+      "kernel_sum_percent": 1.7560977487769538
+    },
+    {
+      "kernel": "cache_dynamic",
+      "instances": 1104,
+      "sum_ms": 1.41146,
+      "median_us": 0.992,
+      "max_us": 317.537,
+      "kernel_sum_percent": 0.44541137233255246
+    },
+    {
+      "kernel": "gelu_gate",
+      "instances": 1104,
+      "sum_ms": 1.235946,
+      "median_us": 0.928,
+      "max_us": 208.226,
+      "kernel_sum_percent": 0.3900247998447911
+    },
+    {
+      "kernel": "ffn_residual_scale",
+      "instances": 1104,
+      "sum_ms": 1.145191,
+      "median_us": 0.992,
+      "max_us": 2.464,
+      "kernel_sum_percent": 0.3613854412401967
+    },
+    {
+      "kernel": "vector_add",
+      "instances": 1104,
+      "sum_ms": 0.950359,
+      "median_us": 0.864,
+      "max_us": 1.088,
+      "kernel_sum_percent": 0.2999027293714255
+    },
+    {
+      "kernel": "greedy_partial",
+      "instances": 23,
+      "sum_ms": 0.094592,
+      "median_us": 4.096,
+      "max_us": 4.224,
+      "kernel_sum_percent": 0.02985019237646182
+    },
+    {
+      "kernel": "greedy_final",
+      "instances": 23,
+      "sum_ms": 0.050528,
+      "median_us": 2.208,
+      "max_us": 2.24,
+      "kernel_sum_percent": 0.015945011421662117
+    },
+    {
+      "kernel": "lookup_dynamic",
+      "instances": 23,
+      "sum_ms": 0.02848,
+      "median_us": 1.248,
+      "max_us": 1.312,
+      "kernel_sum_percent": 0.008987371858948249
+    }
+  ],
+  "median_step_ms": {
+    "wall_ms": 14.401328,
+    "tracked_gpu_ms": 13.756203,
+    "uncovered_ms": 0.510726
+  },
+  "max_anchor_gap_ms": 16.012408,
+  "notes": [
+    "Anchor intervals are not HTTP or engine token-ready measurements.",
+    "Tracked GPU time is a union of recorded kernels/copies/memsets, without double counting.",
+    "Uncovered time has no causal attribution: host work, driver scheduling and untracked work may contribute.",
+    "Per-kernel percentages use summed kernel durations, not end-to-end wall time."
+  ]
+}

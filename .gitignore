@@ -1,0 +1,15 @@
+/target/
+/models/*
+!/models/README.md
+/benchmarks/results/*
+!/benchmarks/results/README.md
+.env
+*.ptx
+*.cubin
+
+/tools/
+/benchmarks/*.log
+
+/benchmarks/*.nsys-rep
+/benchmarks/*.sqlite
+/benchmarks/*.ncu-rep

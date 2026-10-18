@@ -1,0 +1,8 @@
+Texte → 48 blocs GPU → RMSNorm finale → projection Q6_K → softcap
+IDs : [2, 53406, 236764, 5739, 11817, 236772, 11372, 2360] ; dernière position 7
+48 blocs contrôlés face au CPU ; 262144 sorties de vocabulaire vérifiées
+Norme finale : erreur max 0.00008223 ; ratio 0.29132
+Logits bruts : erreur max 0.00005980 ; ratio 0.42836
+Logits après softcap : erreur max 0.00005519 ; ratio 0.42835
+Référence CPU depuis les embeddings ; atol=rtol=1e-4, limite ratio 1.
+Tête alimentée directement par la sortie GPU du bloc 47. Aucun token généré.

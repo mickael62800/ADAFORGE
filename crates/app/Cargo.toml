@@ -1,0 +1,15 @@
+[package]
+name = "adaforge"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+adaforge-application.workspace = true
+adaforge-model-formats.workspace = true
+adaforge-cuda-backend.workspace = true
+adaforge-server.workspace = true
+adaforge-cli.workspace = true

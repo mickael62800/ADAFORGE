@@ -1,0 +1,2705 @@
+{
+  "scope": "5 alternating native-layout kernels; 30 timings after 2 warmups; cold denotes 128 MiB eviction pass outside timed interval, not measured cache residency; CPU FP64 tolerance 1e-4 and bitwise equivalence to q4_row for research schedules.",
+  "samples": [
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_matvec",
+      "ms": 0.012288,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.012208,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_shape1",
+      "ms": 0.033552,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_shape2",
+      "ms": 0.019104,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_shape4",
+      "ms": 0.012032,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_matvec",
+      "ms": 0.024576,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.022528,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_shape1",
+      "ms": 0.044032,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_shape2",
+      "ms": 0.032768,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_shape4",
+      "ms": 0.024576,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_matvec",
+      "ms": 0.012288,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.012192,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_shape1",
+      "ms": 0.032768,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_shape2",
+      "ms": 0.018464,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_shape4",
+      "ms": 0.011968,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_matvec",
+      "ms": 0.024576,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.021664001,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_shape1",
+      "ms": 0.044032,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_shape2",
+      "ms": 0.032768,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_shape4",
+      "ms": 0.024672002,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_matvec",
+      "ms": 0.012256,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.012288,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_shape1",
+      "ms": 0.033456,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_shape2",
+      "ms": 0.01912,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_shape4",
+      "ms": 0.012016,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_matvec",
+      "ms": 0.024576,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.022528,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_shape1",
+      "ms": 0.044032,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_shape2",
+      "ms": 0.032768,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_shape4",
+      "ms": 0.024576,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_k.weight",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_matvec",
+      "ms": 0.008239999,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_k.weight",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.008880001,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.0.attn_k.weight",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_shape1",
+      "ms": 0.018432,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_k.weight",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_shape2",
+      "ms": 0.011328,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_k.weight",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_shape4",
+      "ms": 0.008192,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_k.weight",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_matvec",
+      "ms": 0.021504,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_k.weight",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.01536,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.0.attn_k.weight",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_shape1",
+      "ms": 0.03072,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_k.weight",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_shape2",
+      "ms": 0.023552,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_k.weight",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_shape4",
+      "ms": 0.0236,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_k.weight",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_matvec",
+      "ms": 0.008192,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_k.weight",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.008192,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.0.attn_k.weight",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_shape1",
+      "ms": 0.018432,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_k.weight",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_shape2",
+      "ms": 0.011264,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_k.weight",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_shape4",
+      "ms": 0.008192,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_k.weight",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_matvec",
+      "ms": 0.021504,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_k.weight",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.01536,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.0.attn_k.weight",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_shape1",
+      "ms": 0.029696,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_k.weight",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_shape2",
+      "ms": 0.023056,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_k.weight",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_shape4",
+      "ms": 0.024512,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_k.weight",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_matvec",
+      "ms": 0.008192,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_k.weight",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.008192,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.0.attn_k.weight",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_shape1",
+      "ms": 0.018432,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_k.weight",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_shape2",
+      "ms": 0.011264,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_k.weight",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_shape4",
+      "ms": 0.008192,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_k.weight",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_matvec",
+      "ms": 0.021504,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_k.weight",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.01536,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.0.attn_k.weight",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_shape1",
+      "ms": 0.029696,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_k.weight",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_shape2",
+      "ms": 0.023472,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_k.weight",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_shape4",
+      "ms": 0.023552,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_q.weight",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_matvec",
+      "ms": 0.019456,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_q.weight",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.019456,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.5.attn_q.weight",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_shape1",
+      "ms": 0.062176,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_q.weight",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_shape2",
+      "ms": 0.032768,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_q.weight",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_shape4",
+      "ms": 0.018432,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_q.weight",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_matvec",
+      "ms": 0.044032,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_q.weight",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.037888,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.5.attn_q.weight",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_shape1",
+      "ms": 0.072704,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_q.weight",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_shape2",
+      "ms": 0.0512,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_q.weight",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_shape4",
+      "ms": 0.047104,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_q.weight",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_matvec",
+      "ms": 0.020304,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_q.weight",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.02016,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.5.attn_q.weight",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_shape1",
+      "ms": 0.062464,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_q.weight",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_shape2",
+      "ms": 0.033792,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_q.weight",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_shape4",
+      "ms": 0.019216001,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_q.weight",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_matvec",
+      "ms": 0.043008,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_q.weight",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.036864,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.5.attn_q.weight",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_shape1",
+      "ms": 0.07168,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_q.weight",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_shape2",
+      "ms": 0.0512,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_q.weight",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_shape4",
+      "ms": 0.0476,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_q.weight",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_matvec",
+      "ms": 0.020176,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_q.weight",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.019456,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.5.attn_q.weight",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_shape1",
+      "ms": 0.062464,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_q.weight",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_shape2",
+      "ms": 0.033776,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_q.weight",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_shape4",
+      "ms": 0.018544,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_q.weight",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_matvec",
+      "ms": 0.044032,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_q.weight",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.037888,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.5.attn_q.weight",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_shape1",
+      "ms": 0.072704,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_q.weight",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_shape2",
+      "ms": 0.051104,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_q.weight",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_shape4",
+      "ms": 0.047104,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_k.weight",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_matvec",
+      "ms": 0.007168,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_k.weight",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.005248,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.5.attn_k.weight",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_shape1",
+      "ms": 0.008192,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_k.weight",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_shape2",
+      "ms": 0.00696,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_k.weight",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_shape4",
+      "ms": 0.007008,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_k.weight",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_matvec",
+      "ms": 0.01136,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_k.weight",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.009744,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.5.attn_k.weight",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_shape1",
+      "ms": 0.012288,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_k.weight",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_shape2",
+      "ms": 0.012368,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_k.weight",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_shape4",
+      "ms": 0.013312,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_k.weight",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_matvec",
+      "ms": 0.007152,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_k.weight",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.0058399998,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.5.attn_k.weight",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_shape1",
+      "ms": 0.008192,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_k.weight",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_shape2",
+      "ms": 0.006976,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_k.weight",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_shape4",
+      "ms": 0.006992,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_k.weight",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_matvec",
+      "ms": 0.01128,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_k.weight",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.01024,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.5.attn_k.weight",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_shape1",
+      "ms": 0.012288,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_k.weight",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_shape2",
+      "ms": 0.013264,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_k.weight",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_shape4",
+      "ms": 0.0132,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_k.weight",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_matvec",
+      "ms": 0.0070559997,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_k.weight",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.00552,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.5.attn_k.weight",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_shape1",
+      "ms": 0.008192,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_k.weight",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_shape2",
+      "ms": 0.007008,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_k.weight",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_shape4",
+      "ms": 0.0069119995,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_k.weight",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_matvec",
+      "ms": 0.011264,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_k.weight",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.00928,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.5.attn_k.weight",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_shape1",
+      "ms": 0.012288,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_k.weight",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_shape2",
+      "ms": 0.012288,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_k.weight",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_shape4",
+      "ms": 0.012416,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_output.weight",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_matvec",
+      "ms": 0.012288,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_output.weight",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.011984,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.0.attn_output.weight",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_shape1",
+      "ms": 0.032768,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_output.weight",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_shape2",
+      "ms": 0.018432,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_output.weight",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_shape4",
+      "ms": 0.012272,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_output.weight",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_matvec",
+      "ms": 0.024624001,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_output.weight",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.022528,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.0.attn_output.weight",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_shape1",
+      "ms": 0.044032,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_output.weight",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_shape2",
+      "ms": 0.0328,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_output.weight",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_shape4",
+      "ms": 0.024576,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_output.weight",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_matvec",
+      "ms": 0.012288,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_output.weight",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.011616,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.0.attn_output.weight",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_shape1",
+      "ms": 0.032768,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_output.weight",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_shape2",
+      "ms": 0.018432,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_output.weight",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_shape4",
+      "ms": 0.012288,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_output.weight",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_matvec",
+      "ms": 0.024704,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_output.weight",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.022528,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.0.attn_output.weight",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_shape1",
+      "ms": 0.044032,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_output.weight",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_shape2",
+      "ms": 0.032768,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_output.weight",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_shape4",
+      "ms": 0.024576,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_output.weight",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_matvec",
+      "ms": 0.012288,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_output.weight",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.012,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.0.attn_output.weight",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_shape1",
+      "ms": 0.032768,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_output.weight",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_shape2",
+      "ms": 0.018432,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_output.weight",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_shape4",
+      "ms": 0.01216,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_output.weight",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_matvec",
+      "ms": 0.0256,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_output.weight",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.021504,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.0.attn_output.weight",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_shape1",
+      "ms": 0.044032,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_output.weight",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_shape2",
+      "ms": 0.032816,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.attn_output.weight",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_shape4",
+      "ms": 0.024576,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_output.weight",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_matvec",
+      "ms": 0.02048,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_output.weight",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.019264,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.5.attn_output.weight",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_shape1",
+      "ms": 0.06144,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_output.weight",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_shape2",
+      "ms": 0.033472,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_output.weight",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_shape4",
+      "ms": 0.02048,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_output.weight",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_matvec",
+      "ms": 0.044096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_output.weight",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.037888,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.5.attn_output.weight",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_shape1",
+      "ms": 0.074752,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_output.weight",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_shape2",
+      "ms": 0.056256,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_output.weight",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_shape4",
+      "ms": 0.045056,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_output.weight",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_matvec",
+      "ms": 0.02088,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_output.weight",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.019456,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.5.attn_output.weight",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_shape1",
+      "ms": 0.06216,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_output.weight",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_shape2",
+      "ms": 0.033792,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_output.weight",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_shape4",
+      "ms": 0.02048,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_output.weight",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_matvec",
+      "ms": 0.045056,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_output.weight",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.037888,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.5.attn_output.weight",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_shape1",
+      "ms": 0.075728,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_output.weight",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_shape2",
+      "ms": 0.05632,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_output.weight",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_shape4",
+      "ms": 0.045056,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_output.weight",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_matvec",
+      "ms": 0.02136,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_output.weight",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.019456,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.5.attn_output.weight",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_shape1",
+      "ms": 0.062304,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_output.weight",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_shape2",
+      "ms": 0.033792,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_output.weight",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_shape4",
+      "ms": 0.02048,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_output.weight",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_matvec",
+      "ms": 0.045056,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_output.weight",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.037888,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.5.attn_output.weight",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_shape1",
+      "ms": 0.07576001,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_output.weight",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_shape2",
+      "ms": 0.05632,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.5.attn_output.weight",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_shape4",
+      "ms": 0.045056,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_matvec",
+      "ms": 0.035584,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.031744,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_shape1",
+      "ms": 0.11264,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_shape2",
+      "ms": 0.059472,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_shape4",
+      "ms": 0.03568,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_matvec",
+      "ms": 0.075776,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.06656,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_shape1",
+      "ms": 0.126976,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_shape2",
+      "ms": 0.091136,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_shape4",
+      "ms": 0.077824,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_matvec",
+      "ms": 0.04096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.037888,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_shape1",
+      "ms": 0.11876801,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_shape2",
+      "ms": 0.065536,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_shape4",
+      "ms": 0.041632,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_matvec",
+      "ms": 0.07526401,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.06656,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_shape1",
+      "ms": 0.126976,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_shape2",
+      "ms": 0.091648,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_shape4",
+      "ms": 0.077392,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_matvec",
+      "ms": 0.035584,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.03176,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_shape1",
+      "ms": 0.11264,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_shape2",
+      "ms": 0.05944,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_shape4",
+      "ms": 0.03568,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_matvec",
+      "ms": 0.0768,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.06656,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_shape1",
+      "ms": 0.126976,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_shape2",
+      "ms": 0.091136,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_shape4",
+      "ms": 0.077824,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-1x96",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_matvec",
+      "ms": 0.009216,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-1x96",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.009216,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "synthetic-1x96",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_shape1",
+      "ms": 0.009216,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-1x96",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_shape2",
+      "ms": 0.009216,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-1x96",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_shape4",
+      "ms": 0.009216,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-1x96",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_matvec",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-1x96",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "synthetic-1x96",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_shape1",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-1x96",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_shape2",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-1x96",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_shape4",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-1x96",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_matvec",
+      "ms": 0.003104,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-1x96",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.00384,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "synthetic-1x96",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_shape1",
+      "ms": 0.003792,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-1x96",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_shape2",
+      "ms": 0.004,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-1x96",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_shape4",
+      "ms": 0.003744,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-1x96",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_matvec",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-1x96",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "synthetic-1x96",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_shape1",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-1x96",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_shape2",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-1x96",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_shape4",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-1x96",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_matvec",
+      "ms": 0.0039520003,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-1x96",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.003968,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "synthetic-1x96",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_shape1",
+      "ms": 0.003936,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-1x96",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_shape2",
+      "ms": 0.003856,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-1x96",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_shape4",
+      "ms": 0.004032,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-1x96",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_matvec",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-1x96",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "synthetic-1x96",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_shape1",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-1x96",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_shape2",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-1x96",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_shape4",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-5x96",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_matvec",
+      "ms": 0.003072,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-5x96",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.0035040001,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "synthetic-5x96",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_shape1",
+      "ms": 0.003072,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-5x96",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_shape2",
+      "ms": 0.003488,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-5x96",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_shape4",
+      "ms": 0.003104,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-5x96",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_matvec",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-5x96",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "synthetic-5x96",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_shape1",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-5x96",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_shape2",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-5x96",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_shape4",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-5x96",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_matvec",
+      "ms": 0.0032159998,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-5x96",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.00384,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "synthetic-5x96",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_shape1",
+      "ms": 0.00384,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-5x96",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_shape2",
+      "ms": 0.003904,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-5x96",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_shape4",
+      "ms": 0.0032,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-5x96",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_matvec",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-5x96",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "synthetic-5x96",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_shape1",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-5x96",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_shape2",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-5x96",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_shape4",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-5x96",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_matvec",
+      "ms": 0.003072,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-5x96",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.003728,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "synthetic-5x96",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_shape1",
+      "ms": 0.003072,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-5x96",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_shape2",
+      "ms": 0.003488,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-5x96",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_shape4",
+      "ms": 0.0032,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-5x96",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_matvec",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-5x96",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "synthetic-5x96",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_shape1",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-5x96",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_shape2",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-5x96",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_shape4",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-9x96",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_matvec",
+      "ms": 0.009184,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-9x96",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.009168,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "synthetic-9x96",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_shape1",
+      "ms": 0.009008,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-9x96",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_shape2",
+      "ms": 0.008928,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-9x96",
+      "case": 0,
+      "cold": false,
+      "kernel": "q4_shape4",
+      "ms": 0.009136,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-9x96",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_matvec",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-9x96",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "synthetic-9x96",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_shape1",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-9x96",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_shape2",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-9x96",
+      "case": 0,
+      "cold": true,
+      "kernel": "q4_shape4",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-9x96",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_matvec",
+      "ms": 0.009008,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-9x96",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.009024,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "synthetic-9x96",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_shape1",
+      "ms": 0.009008,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-9x96",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_shape2",
+      "ms": 0.009056,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-9x96",
+      "case": 1,
+      "cold": false,
+      "kernel": "q4_shape4",
+      "ms": 0.008992,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-9x96",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_matvec",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-9x96",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "synthetic-9x96",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_shape1",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-9x96",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_shape2",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-9x96",
+      "case": 1,
+      "cold": true,
+      "kernel": "q4_shape4",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-9x96",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_matvec",
+      "ms": 0.0040800003,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-9x96",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.003472,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "synthetic-9x96",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_shape1",
+      "ms": 0.0037600002,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-9x96",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_shape2",
+      "ms": 0.004032,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-9x96",
+      "case": 2,
+      "cold": false,
+      "kernel": "q4_shape4",
+      "ms": 0.003776,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-9x96",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_matvec",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-9x96",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_matvec_kparallel",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": false
+    },
+    {
+      "tensor": "synthetic-9x96",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_shape1",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-9x96",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_shape2",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": true
+    },
+    {
+      "tensor": "synthetic-9x96",
+      "case": 2,
+      "cold": true,
+      "kernel": "q4_shape4",
+      "ms": 0.004096,
+      "cpu_oracle": true,
+      "native_bits": true
+    }
+  ]
+}

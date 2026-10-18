@@ -1,0 +1,329 @@
+{
+  "samples": [
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 0,
+      "kernel": "q4_q8_matvec",
+      "quant_included": true,
+      "median_ms": 0.011264,
+      "max_absolute_error_vs_fp32": 0,
+      "relative_l2_vs_fp32": 0
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 0,
+      "kernel": "q4_q8_kparallel",
+      "quant_included": true,
+      "median_ms": 0.011264,
+      "max_absolute_error_vs_fp32": 0,
+      "relative_l2_vs_fp32": 0
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 0,
+      "kernel": "q4_matvec",
+      "quant_included": false,
+      "median_ms": 0.012064,
+      "max_absolute_error_vs_fp32": 0,
+      "relative_l2_vs_fp32": 0
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 1,
+      "kernel": "q4_q8_matvec",
+      "quant_included": true,
+      "median_ms": 0.016192,
+      "max_absolute_error_vs_fp32": 0.011026720392692368,
+      "relative_l2_vs_fp32": 0.0030930221162301943
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 1,
+      "kernel": "q4_q8_kparallel",
+      "quant_included": true,
+      "median_ms": 0.01536,
+      "max_absolute_error_vs_fp32": 0.011026720392692368,
+      "relative_l2_vs_fp32": 0.0030930208203021462
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 1,
+      "kernel": "q4_matvec",
+      "quant_included": false,
+      "median_ms": 0.012288,
+      "max_absolute_error_vs_fp32": 3.598306648200378e-07,
+      "relative_l2_vs_fp32": 1.0112803965996764e-07
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 2,
+      "kernel": "q4_q8_matvec",
+      "quant_included": true,
+      "median_ms": 0.012,
+      "max_absolute_error_vs_fp32": 0.0020170677453279495,
+      "relative_l2_vs_fp32": 0.0038887008633625214
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 2,
+      "kernel": "q4_q8_kparallel",
+      "quant_included": true,
+      "median_ms": 0.011264,
+      "max_absolute_error_vs_fp32": 0.0020170751959085464,
+      "relative_l2_vs_fp32": 0.0038887045865548422
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 2,
+      "kernel": "q4_matvec",
+      "quant_included": false,
+      "median_ms": 0.012288,
+      "max_absolute_error_vs_fp32": 5.436595529317856e-08,
+      "relative_l2_vs_fp32": 1.1871160018387053e-07
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 3,
+      "kernel": "q4_q8_matvec",
+      "quant_included": true,
+      "median_ms": 0.011264,
+      "max_absolute_error_vs_fp32": 0.007407739991119655,
+      "relative_l2_vs_fp32": 0.0005466785390162955
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 3,
+      "kernel": "q4_q8_kparallel",
+      "quant_included": true,
+      "median_ms": 0.011264,
+      "max_absolute_error_vs_fp32": 0.0074075015725405535,
+      "relative_l2_vs_fp32": 0.0005466784657975813
+    },
+    {
+      "tensor": "blk.0.attn_q.weight",
+      "case": 3,
+      "kernel": "q4_matvec",
+      "quant_included": false,
+      "median_ms": 0.012288,
+      "max_absolute_error_vs_fp32": 1.2587011752884791e-06,
+      "relative_l2_vs_fp32": 6.998459898422202e-08
+    },
+    {
+      "tensor": "blk.0.ffn_gate.weight",
+      "case": 0,
+      "kernel": "q4_q8_matvec",
+      "quant_included": true,
+      "median_ms": 0.023552,
+      "max_absolute_error_vs_fp32": 0,
+      "relative_l2_vs_fp32": 0
+    },
+    {
+      "tensor": "blk.0.ffn_gate.weight",
+      "case": 0,
+      "kernel": "q4_q8_kparallel",
+      "quant_included": true,
+      "median_ms": 0.024576,
+      "max_absolute_error_vs_fp32": 0,
+      "relative_l2_vs_fp32": 0
+    },
+    {
+      "tensor": "blk.0.ffn_gate.weight",
+      "case": 0,
+      "kernel": "q4_matvec",
+      "quant_included": false,
+      "median_ms": 0.032672,
+      "max_absolute_error_vs_fp32": 0,
+      "relative_l2_vs_fp32": 0
+    },
+    {
+      "tensor": "blk.0.ffn_gate.weight",
+      "case": 1,
+      "kernel": "q4_q8_matvec",
+      "quant_included": true,
+      "median_ms": 0.023552,
+      "max_absolute_error_vs_fp32": 0.008218931607189006,
+      "relative_l2_vs_fp32": 0.00297069299433689
+    },
+    {
+      "tensor": "blk.0.ffn_gate.weight",
+      "case": 1,
+      "kernel": "q4_q8_kparallel",
+      "quant_included": true,
+      "median_ms": 0.024576,
+      "max_absolute_error_vs_fp32": 0.008219050816478557,
+      "relative_l2_vs_fp32": 0.002970693428091659
+    },
+    {
+      "tensor": "blk.0.ffn_gate.weight",
+      "case": 1,
+      "kernel": "q4_matvec",
+      "quant_included": false,
+      "median_ms": 0.032576,
+      "max_absolute_error_vs_fp32": 4.0972736314870417e-07,
+      "relative_l2_vs_fp32": 9.981993963178329e-08
+    },
+    {
+      "tensor": "blk.0.ffn_gate.weight",
+      "case": 2,
+      "kernel": "q4_q8_matvec",
+      "quant_included": true,
+      "median_ms": 0.023552,
+      "max_absolute_error_vs_fp32": 0.001090188859961927,
+      "relative_l2_vs_fp32": 0.0036943538775685387
+    },
+    {
+      "tensor": "blk.0.ffn_gate.weight",
+      "case": 2,
+      "kernel": "q4_q8_kparallel",
+      "quant_included": true,
+      "median_ms": 0.024576,
+      "max_absolute_error_vs_fp32": 0.0010901953792199492,
+      "relative_l2_vs_fp32": 0.0036943531484249976
+    },
+    {
+      "tensor": "blk.0.ffn_gate.weight",
+      "case": 2,
+      "kernel": "q4_matvec",
+      "quant_included": false,
+      "median_ms": 0.032768,
+      "max_absolute_error_vs_fp32": 5.6694261729717255e-08,
+      "relative_l2_vs_fp32": 1.1068410516894432e-07
+    },
+    {
+      "tensor": "blk.0.ffn_gate.weight",
+      "case": 3,
+      "kernel": "q4_q8_matvec",
+      "quant_included": true,
+      "median_ms": 0.024288,
+      "max_absolute_error_vs_fp32": 0.004688232644554091,
+      "relative_l2_vs_fp32": 0.0005659175384633013
+    },
+    {
+      "tensor": "blk.0.ffn_gate.weight",
+      "case": 3,
+      "kernel": "q4_q8_kparallel",
+      "quant_included": true,
+      "median_ms": 0.024576,
+      "max_absolute_error_vs_fp32": 0.004688232644554091,
+      "relative_l2_vs_fp32": 0.0005659175865519456
+    },
+    {
+      "tensor": "blk.0.ffn_gate.weight",
+      "case": 3,
+      "kernel": "q4_matvec",
+      "quant_included": false,
+      "median_ms": 0.032544,
+      "max_absolute_error_vs_fp32": 9.003349124014903e-07,
+      "relative_l2_vs_fp32": 6.948998677912761e-08
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 0,
+      "kernel": "q4_q8_matvec",
+      "quant_included": true,
+      "median_ms": 0.023712,
+      "max_absolute_error_vs_fp32": 0,
+      "relative_l2_vs_fp32": 0
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 0,
+      "kernel": "q4_q8_kparallel",
+      "quant_included": true,
+      "median_ms": 0.023424,
+      "max_absolute_error_vs_fp32": 0,
+      "relative_l2_vs_fp32": 0
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 0,
+      "kernel": "q4_matvec_kparallel",
+      "quant_included": false,
+      "median_ms": 0.031744,
+      "max_absolute_error_vs_fp32": 0,
+      "relative_l2_vs_fp32": 0
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 1,
+      "kernel": "q4_q8_matvec",
+      "quant_included": true,
+      "median_ms": 0.023616,
+      "max_absolute_error_vs_fp32": 0.014889878135363688,
+      "relative_l2_vs_fp32": 0.002965151597783963
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 1,
+      "kernel": "q4_q8_kparallel",
+      "quant_included": true,
+      "median_ms": 0.023392,
+      "max_absolute_error_vs_fp32": 0.014889639716784586,
+      "relative_l2_vs_fp32": 0.0029651507366758928
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 1,
+      "kernel": "q4_matvec_kparallel",
+      "quant_included": false,
+      "median_ms": 0.031744,
+      "max_absolute_error_vs_fp32": 3.8638972910121083e-07,
+      "relative_l2_vs_fp32": 1.0781269158892072e-07
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 2,
+      "kernel": "q4_q8_matvec",
+      "quant_included": true,
+      "median_ms": 0.028672,
+      "max_absolute_error_vs_fp32": 0.0019091193098574877,
+      "relative_l2_vs_fp32": 0.004023326586847604
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 2,
+      "kernel": "q4_q8_kparallel",
+      "quant_included": true,
+      "median_ms": 0.034816,
+      "max_absolute_error_vs_fp32": 0.0019091044086962938,
+      "relative_l2_vs_fp32": 0.004023323879118415
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 2,
+      "kernel": "q4_matvec_kparallel",
+      "quant_included": false,
+      "median_ms": 0.0376,
+      "max_absolute_error_vs_fp32": 5.1048118621110916e-08,
+      "relative_l2_vs_fp32": 1.2122121759966186e-07
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 3,
+      "kernel": "q4_q8_matvec",
+      "quant_included": true,
+      "median_ms": 0.029408,
+      "max_absolute_error_vs_fp32": 0.008200882347528804,
+      "relative_l2_vs_fp32": 0.0007002679119791097
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 3,
+      "kernel": "q4_q8_kparallel",
+      "quant_included": true,
+      "median_ms": 0.034816,
+      "max_absolute_error_vs_fp32": 0.008200882347528804,
+      "relative_l2_vs_fp32": 0.0007002683252031905
+    },
+    {
+      "tensor": "blk.0.ffn_down.weight",
+      "case": 3,
+      "kernel": "q4_matvec_kparallel",
+      "quant_included": false,
+      "median_ms": 0.03248,
+      "max_absolute_error_vs_fp32": 1.0109037695826828e-06,
+      "relative_l2_vs_fp32": 8.00787617425748e-08
+    }
+  ],
+  "scope": "warm isolated kernels; synthetic input vectors; real layer-0 weights; Q8 timings include activation quantization; CPU oracle for quantized activations verified"
+}

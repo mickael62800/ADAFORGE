@@ -1,0 +1,393 @@
+{
+  "target": "RTX 4090 sm_89",
+  "marlin_commit": "1f25790bdd49fba53106164a24666dade68d7c90",
+  "external_reference_commits": {
+    "ninfer_4090": "04266a0fd8446d8c1c3300606c0c60fd9550a4a4",
+    "exllamav2": "7dc12af3a81f34ac3f27cd7602ed539b638933ca",
+    "redline": "8d2d3e0744ee89d71437dfc771839b0630430494"
+  },
+  "items": [
+    {
+      "id": "M01",
+      "origin": "Mesures",
+      "optimization": "Élargir les mesures à plusieurs prompts, longueurs de sortie et contextes",
+      "status": "À faire",
+      "priority": "P0",
+      "condition": "Éviter de régler le moteur sur le seul Bonjour ; séparer chargement, TTFT, prefill et decode"
+    },
+    {
+      "id": "M02",
+      "origin": "Mesures",
+      "optimization": "Profil récent du FP32 avec partage K down : temps GPU, soumission et attentes hôte",
+      "status": "À faire",
+      "priority": "P0",
+      "condition": "Le profil détaillé antérieur précède ce dernier réglage ; quantifier la marge CPU/GPU"
+    },
+    {
+      "id": "M03",
+      "origin": "Ada / Imp",
+      "optimization": "Balayer la préférence L1/shared par famille de kernels",
+      "status": "FFN 0/100 testé, aucun gain établi ; réglages retirés",
+      "priority": "P1",
+      "condition": "Petit changement de configuration ; comparer au choix automatique"
+    },
+    {
+      "id": "M04",
+      "origin": "Imp / AdaForge",
+      "optimization": "Deux ou quatre lignes par warp, avec activations réutilisées",
+      "status": "Deux lignes voisines testées : régression, variante retirée",
+      "priority": "P1",
+      "condition": "Différent du calcul gate/up conjoint écarté"
+    },
+    {
+      "id": "M05",
+      "origin": "Imp / Marlin",
+      "optimization": "Activations en shared ou registres ; disposition sans conflits de banques",
+      "status": "Vecteur complet en shared testé : régression, variante retirée",
+      "priority": "P1",
+      "condition": "Mesurer le coût du chargement initial et des synchronisations"
+    },
+    {
+      "id": "M06",
+      "origin": "Marlin / AdaForge",
+      "optimization": "Rangement des poids Q4 et échelles par tuiles, groupe 32 conservé",
+      "status": "Conservé par défaut pour FFN 3840/15360 ; ABBA +2,58 tok/s sur le prompt mesuré, sans duplication GPU",
+      "priority": "Fait ciblé",
+      "condition": "Conversion réversible bit à bit ; aucun nouveau choix de quantification"
+    },
+    {
+      "id": "M07",
+      "origin": "Marlin",
+      "optimization": "Lectures vectorisées alignées et moins de calculs d’adresses",
+      "status": "À tester",
+      "priority": "P1",
+      "condition": "Couplé à M06 ; pas de lecture uint4 aveugle sur chaque bloc de 18 octets"
+    },
+    {
+      "id": "M08",
+      "origin": "Marlin",
+      "optimization": "Politiques de cache distinctes pour poids en flux et activations réutilisées",
+      "status": "À tester",
+      "priority": "P2",
+      "condition": "Les intrinsics cache testés précédemment ne couvraient pas ce pipeline complet"
+    },
+    {
+      "id": "M09",
+      "origin": "Marlin / Ada",
+      "optimization": "Chargements asynchrones et pipeline à 2/3/4 étapes",
+      "status": "Deux buffers, 1/4 groupes par étape testés : variantes plus lentes et écartées",
+      "priority": "P2",
+      "condition": "Dépend du kernel et du rangement ; mesurer occupation et latence"
+    },
+    {
+      "id": "M10",
+      "origin": "Marlin / AdaForge",
+      "optimization": "Tuiles et partition des SM adaptées à chaque forme de matrice",
+      "status": "À tester",
+      "priority": "P2",
+      "condition": "Sélection hors chemin critique ; vérifier réductions inter-blocs et petites matrices"
+    },
+    {
+      "id": "M11",
+      "origin": "Marlin",
+      "optimization": "Déquantification half2/LOP3 et calcul W4A16 sur Tensor Cores",
+      "status": "À prototyper",
+      "priority": "P2",
+      "condition": "Nouvelle précision, scales groupe 32, sorties et réductions à définir ; tester M=1 séparément"
+    },
+    {
+      "id": "M12",
+      "origin": "AdaForge",
+      "optimization": "Optimiser la projection Q6_K de la tête",
+      "status": "À tester",
+      "priority": "P2",
+      "condition": "Poids, échelles, lectures et distribution du travail ; indépendant du kernel INT4"
+    },
+    {
+      "id": "M13",
+      "origin": "AdaForge",
+      "optimization": "Fusion tête Q6_K et réduction greedy",
+      "status": "À prototyper",
+      "priority": "P2",
+      "condition": "Conserver les égalités, le rejet des non-finis et les 262144 candidats"
+    },
+    {
+      "id": "M14",
+      "origin": "Imp / AdaForge",
+      "optimization": "Inclure la tête et la sélection dans un graphe CUDA réutilisable",
+      "status": "À tester",
+      "priority": "P2",
+      "condition": "D’abord mesurer la part des quatre lancements et de la lecture hôte"
+    },
+    {
+      "id": "M15",
+      "origin": "Imp",
+      "optimization": "Courtes rafales ou boucle de génération GPU autonome",
+      "status": "À étudier",
+      "priority": "P3",
+      "condition": "Compatibilité pilote/cudarc et gestion EOS, budget, cache et streaming"
+    },
+    {
+      "id": "M16",
+      "origin": "AdaForge / Marlin",
+      "optimization": "Prefill réellement par lots, avec GEMM et attention causale par blocs",
+      "status": "À construire",
+      "priority": "P2",
+      "condition": "Accélère le prompt ; brique nécessaire à la vérification spéculative"
+    },
+    {
+      "id": "M17",
+      "origin": "Imp",
+      "optimization": "Vérification parallèle de propositions et annulation du KV rejeté",
+      "status": "À construire",
+      "priority": "P3",
+      "condition": "Dépend de M16 ; préserver les positions et l’historique exacts"
+    },
+    {
+      "id": "M18",
+      "origin": "Imp",
+      "optimization": "Propositions suffix/ngram sans modèle supplémentaire",
+      "status": "À tester après M17",
+      "priority": "P3",
+      "condition": "Gain dépendant des répétitions ; comparer sur texte réel"
+    },
+    {
+      "id": "M19",
+      "origin": "Google / Imp",
+      "optimization": "Drafter MTP officiel compatible avec notre Gemma QAT",
+      "status": "À tester après M17",
+      "priority": "P3",
+      "condition": "Chargement, activations partagées, coût de vérification et taux d’acceptation"
+    },
+    {
+      "id": "M20",
+      "origin": "AdaForge",
+      "optimization": "Cache KV FP16, puis éventuellement autres précisions",
+      "status": "À évaluer",
+      "priority": "P3",
+      "condition": "Nouvelle précision ; surtout utile quand le contexte augmente"
+    },
+    {
+      "id": "M21",
+      "origin": "AdaForge / Imp",
+      "optimization": "Cache local circulaire respectant la fenêtre 1024",
+      "status": "À construire pour contexte long",
+      "priority": "P3",
+      "condition": "Réduit la croissance mémoire locale ; conserver les positions RoPE absolues"
+    },
+    {
+      "id": "M22",
+      "origin": "Imp / AdaForge",
+      "optimization": "Attention groupée réutilisant K/V entre têtes Q et découpage pour contexte long",
+      "status": "À tester",
+      "priority": "P3",
+      "condition": "La distribution optimale dépend du contexte et des couches locales/globales"
+    },
+    {
+      "id": "M23",
+      "origin": "AdaForge",
+      "optimization": "Réduction des buffers, copies internes et petites opérations par fusion ciblée",
+      "status": "Préparation Q/K/V groupée adoptée pour têtes 256/512",
+      "priority": "P1",
+      "condition": "Conserver les frontières d’arrondi ou documenter leur changement ; coût maximal à estimer",
+      "experiment_report": "docs/optimization-qkv-prep.md",
+      "evidence": {
+        "fp32_boundary_preserved": true,
+        "large_position_bitwise_checks": true,
+        "full_model_cpu_oracle_max_ratio": 0.42836,
+        "removed_launches_per_token": 192,
+        "default_enabled": true,
+        "throughput_note": "Short ABBA approximately +2.42%; long test positive with substantial control drift; no general throughput guarantee."
+      }
+    },
+    {
+      "id": "M24",
+      "origin": "AdaForge",
+      "optimization": "Cache de compilation PTX/modules et amélioration du chargement",
+      "status": "À faire séparément",
+      "priority": "P3",
+      "condition": "Améliore le démarrage, pas les tokens/s après échauffement"
+    },
+    {
+      "id": "M25",
+      "origin": "AdaForge",
+      "optimization": "Traitement de plusieurs conversations et cache de préfixes",
+      "status": "Hors priorité actuelle",
+      "priority": "P4",
+      "condition": "Objectif distinct du débit d’une conversation ; une seule carte reste suffisante comme cible"
+    },
+    {
+      "id": "M26",
+      "origin": "NInfer-4090 / ExLlamaV2",
+      "optimization": "Qualifier hors génération un schedule Q4 par forme Gemma, puis dispatcher par table fixe",
+      "status": "À prototyper",
+      "priority": "P1",
+      "condition": "Essais limités aux formes réelles ; conserver un choix déterministe si les mesures sont proches ou instables"
+    },
+    {
+      "id": "M27",
+      "origin": "NInfer-4090 / Redline",
+      "optimization": "Tuiles Q4_0 de codes et paires d’échelles alignées, cp.async et double-buffering, avec accumulation FP32",
+      "status": "Tuiles synchrones conservées ; async 1/4 groupes par étape écarté sur ce layout",
+      "priority": "P2",
+      "condition": "Conversion interne strictement réversible ; le bloc GGUF de 18 octets interdit de copier un layout externe tel quel"
+    },
+    {
+      "id": "M28",
+      "origin": "NInfer-4090 / Redline",
+      "optimization": "Étendre l’attention GQA à un chemin contexte long : CTA par tête KV, softmax en ligne et accumulations en registres",
+      "status": "À étudier après profil long contexte",
+      "priority": "P3",
+      "condition": "Utile surtout quand les lectures KV dominent ; vérifier couches locales et globales Gemma séparément"
+    },
+    {
+      "id": "M29",
+      "origin": "NInfer-4090",
+      "optimization": "KV INT8 puis 4-bit pour les très longs contextes",
+      "status": "À évaluer après M28",
+      "priority": "P3",
+      "condition": "Changement de précision : oracle propre, qualité et rappel long contexte requis ; pas une optimisation prioritaire du prompt court"
+    },
+    {
+      "id": "M30",
+      "origin": "Redline",
+      "optimization": "Contrat de benchmark reproductible : entrées, paramètres, résultats bruts, dispersion et profil Nsight node-level",
+      "status": "À faire avec M01–M02",
+      "priority": "P0",
+      "condition": "Ne modifie pas le moteur ; condition pour accepter un gain de performance"
+    },
+    {
+      "id": "T01",
+      "origin": "AdaForge",
+      "optimization": "Poids, buffers et caches KV résidents ; graphes CUDA",
+      "status": "Conservé",
+      "priority": "Fait",
+      "condition": "Pas de recalcul CPU des couches ni de rechargement entre tokens"
+    },
+    {
+      "id": "T02",
+      "origin": "AdaForge",
+      "optimization": "Sélection greedy sur GPU et retour de 8 octets",
+      "status": "Conservé",
+      "priority": "Fait",
+      "condition": "Ne plus compter un gain hypothétique de suppression du transfert complet des logits"
+    },
+    {
+      "id": "T03",
+      "origin": "AdaForge",
+      "optimization": "QKV regroupé, K/V commun calculé une seule fois, gate/up regroupé",
+      "status": "Conservé",
+      "priority": "Fait",
+      "condition": "Le partage des poids ne fusionne pas les caches K après RoPE et V"
+    },
+    {
+      "id": "T04",
+      "origin": "AdaForge",
+      "optimization": "Réductions RMSNorm/attention, Q4 et Q6 optimisés",
+      "status": "Conservé",
+      "priority": "Fait",
+      "condition": "Oracle CPU et tolérances initiales préservés"
+    },
+    {
+      "id": "T05",
+      "origin": "Imp / AdaForge",
+      "optimization": "Partage K entre quatre warps sur down FFN",
+      "status": "Conservé",
+      "priority": "Fait",
+      "condition": "Gain mesuré ; extension à toutes les projections non retenue"
+    },
+    {
+      "id": "T06",
+      "origin": "Imp / AdaForge",
+      "optimization": "Activations Q8 et dp4a dans le FFN",
+      "status": "Expérimental, désactivé par défaut",
+      "priority": "Recherche",
+      "condition": "Gain faible ; IDs changés ; qualité générale non évaluée"
+    },
+    {
+      "id": "R01",
+      "origin": "AdaForge",
+      "optimization": "Séparation simple des échelles et octets Q4 par ligne",
+      "status": "Écarté dans cette forme",
+      "priority": "Archivé",
+      "condition": "66.24 tok/s contre environ 68.1 avant/après"
+    },
+    {
+      "id": "R02",
+      "origin": "AdaForge",
+      "optimization": "Balayage de 1/2/8/16 warps en gardant une ligne par warp",
+      "status": "Aucun gain net",
+      "priority": "Archivé",
+      "condition": "Ne réfute ni multi-lignes par warp ni pipeline par tuiles"
+    },
+    {
+      "id": "R03",
+      "origin": "AdaForge",
+      "optimization": "Gate et up calculés conjointement par warp",
+      "status": "Écarté dans cette forme",
+      "priority": "Archivé",
+      "condition": "Plus lent malgré la validation numérique"
+    },
+    {
+      "id": "R04",
+      "origin": "AdaForge",
+      "optimization": "LOP3 FP32 seul et conversion matérielle du scale seule",
+      "status": "Aucun gain net",
+      "priority": "Archivé",
+      "condition": "Ne réfute pas la déquantification half2 intégrée à un autre kernel"
+    },
+    {
+      "id": "X01",
+      "origin": "Imp / NVIDIA",
+      "optimization": "PDL, NVFP4 natif sm_120a, TMA/WGMMA spécifiques aux générations suivantes",
+      "status": "Non retenu pour sm_89",
+      "priority": "Exclu",
+      "condition": "Vérifier chaque capacité ; ne pas transposer le chemin Blackwell"
+    },
+    {
+      "id": "X02",
+      "origin": "Imp",
+      "optimization": "Caches d’experts MoE et offload de modèles trop gros",
+      "status": "Sans objet pour notre Gemma dense résidente",
+      "priority": "Exclu",
+      "condition": "Ne contribue pas à notre comparaison actuelle"
+    },
+    {
+      "id": "X03",
+      "origin": "Suggestion initiale",
+      "optimization": "Maintenir tout le KV local FP32 dans le L2",
+      "status": "Impossible intégralement aux dimensions visées",
+      "priority": "Exclu",
+      "condition": "640 Mio pour 40 couches à fenêtre 1024 ; une politique de persistance ne verrouille pas le cache"
+    }
+  ],
+  "additional_experiments_2026_10_18": [
+    {
+      "optimization": "Fuse grouped preparation and graph KV writes",
+      "default_enabled": false,
+      "report": "docs/optimization-prep-cache.md",
+      "decision": "Correct; global gain not established against control drift."
+    },
+    {
+      "optimization": "Parallel exponentials with original FP32 summation order",
+      "default_enabled": false,
+      "report": "docs/optimization-attention-exp.md",
+      "decision": "Adaptive >=64 variant: long +3%, short -0.92% descriptive; more qualification needed."
+    },
+    {
+      "optimization": "GPU boundary telemetry",
+      "default_enabled": false,
+      "activation": "scripts/compare_optimization.py --gpu-telemetry",
+      "scope": "Snapshots before/after each process, outside timed requests."
+    }
+  ],
+  "hardware_half_and_q6_tiles": {
+    "report": "docs/optimization-hardware-half.md",
+    "hardware_half_default": true,
+    "finite_patterns_exact": 63488,
+    "q6_tiles_default": false,
+    "current_ada_tps": 76.10319858434816,
+    "current_llama_tps": 78.38951134273223,
+    "comparison": "benchmarks/comparison-cuda-native-after-hardware-half.json"
+  }
+}

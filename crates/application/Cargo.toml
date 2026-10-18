@@ -1,0 +1,11 @@
+[package]
+name = "adaforge-application"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+adaforge-domain.workspace = true

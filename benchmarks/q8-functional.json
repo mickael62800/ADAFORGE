@@ -1,0 +1,13 @@
+{
+  "graph": [
+    "Enchanté de faire votre connaissance, Luc ! Comment puis-je vous aider aujourd'hui ?",
+    "Votre prénom est **Luc**.",
+    "Bonjour ! Je vais très bien, merci de demander. Et vous, comment allez-vous aujourd'hui ? Comment puis-je vous aider ?"
+  ],
+  "direct": [
+    "Enchanté de faire votre connaissance, Luc ! Comment puis-je vous aider aujourd'hui ?",
+    "Votre prénom est **Luc**.",
+    "Bonjour ! Je vais très bien, merci de demander. Et vous, comment allez-vous aujourd'hui ? Comment puis-je vous aider ?"
+  ],
+  "scope": "graph/direct equality and history/reset on one transcript; quality not established"
+}

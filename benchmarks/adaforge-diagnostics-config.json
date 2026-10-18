@@ -1,0 +1,13 @@
+{
+  "backend": "cuda-sm89",
+  "layers": 48,
+  "context_capacity": 22,
+  "vocabulary": 262144,
+  "graphs": true,
+  "kv_dtype": "f32",
+  "tiled_ffn_layers": 48,
+  "q8_ffn_layers": 0,
+  "qkv_kparallel_layers": 0,
+  "output_kparallel_layers": 0,
+  "ffn_matrix_bytes": 4777574400
+}

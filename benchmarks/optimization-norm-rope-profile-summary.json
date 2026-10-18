@@ -1,0 +1,66 @@
+{
+  "reference": {
+    "analysis": "profile-ada-decode-analysis.json",
+    "steps": 23,
+    "norm_rope_average_ms_per_step": 1.5789956521739132,
+    "norm_rope_kernel_instances": 9959,
+    "median_step_ms": {
+      "wall_ms": 13.428663,
+      "tracked_gpu_ms": 13.076979,
+      "uncovered_ms": 0.356101
+    },
+    "kernels": [
+      {
+        "kernel": "rms_norm",
+        "instances": 7751,
+        "sum_ms": 31.075824,
+        "median_us": 5.728,
+        "max_us": 312.45,
+        "kernel_sum_percent": 10.306478382022577
+      },
+      {
+        "kernel": "rope_dynamic",
+        "instances": 2208,
+        "sum_ms": 5.241076,
+        "median_us": 2.3685,
+        "max_us": 2.624,
+        "kernel_sum_percent": 1.7382334412930567
+      }
+    ]
+  },
+  "fused": {
+    "analysis": "profile-norm-rope-analysis.json",
+    "steps": 23,
+    "norm_rope_average_ms_per_step": 1.471887956521739,
+    "norm_rope_kernel_instances": 7751,
+    "median_step_ms": {
+      "wall_ms": 13.323476,
+      "tracked_gpu_ms": 12.974834,
+      "uncovered_ms": 0.327302
+    },
+    "kernels": [
+      {
+        "kernel": "rms_norm",
+        "instances": 5543,
+        "sum_ms": 28.232653,
+        "median_us": 5.792,
+        "max_us": 309.73,
+        "kernel_sum_percent": 9.413778850675076
+      },
+      {
+        "kernel": "norm_rope_dynamic",
+        "instances": 2208,
+        "sum_ms": 5.62077,
+        "median_us": 2.496,
+        "max_us": 3.392,
+        "kernel_sum_percent": 1.8741662623951403
+      }
+    ]
+  },
+  "observed_savings_ms_per_step": 0.10710769565217415,
+  "notes": [
+    "Different captures; descriptive timing comparison, not a controlled throughput benchmark.",
+    "RMS costs include other normalizations in addition to Q/K; the 96-launch reduction is specific to the two replaced Q/K kernels per each of 48 layers.",
+    "All computations and cache remain FP32; head weights and other projections unchanged."
+  ]
+}

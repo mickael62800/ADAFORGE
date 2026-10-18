@@ -1,0 +1,49 @@
+{
+  "experiments": [
+    {
+      "experiment": "Q4 scales/quant bytes separated per row",
+      "report": "optimization-repack.json",
+      "before_tps": 68.12834550905352,
+      "candidate_tps": 66.23662776080744,
+      "before_repeat_tps": 68.04135849601381,
+      "decision": "rejected: no repeatable end-to-end improvement",
+      "identical_tokens": true
+    },
+    {
+      "experiment": "Hardware FP16 to FP32 scale conversion",
+      "report": "optimization-hardware-half.json",
+      "before_tps": 66.92815204679383,
+      "candidate_tps": 68.4490807288458,
+      "before_repeat_tps": 69.1007765725534,
+      "decision": "rejected: no repeatable end-to-end improvement",
+      "identical_tokens": true
+    },
+    {
+      "experiment": "Gate and up computed together per warp",
+      "report": "optimization-paired-gate-up.json",
+      "before_tps": 64.03977371128309,
+      "candidate_tps": 58.37895352426128,
+      "before_repeat_tps": 67.91201555480426,
+      "decision": "rejected: no repeatable end-to-end improvement",
+      "identical_tokens": true
+    },
+    {
+      "experiment": "Exact FP32 nibble conversion with LOP3",
+      "report": "optimization-lop3.json",
+      "before_tps": 67.5089038373822,
+      "candidate_tps": 65.90459936737315,
+      "before_repeat_tps": 67.01026422438532,
+      "decision": "rejected: no repeatable end-to-end improvement",
+      "identical_tokens": true
+    }
+  ],
+  "warps_per_cta_tps": {
+    "2": 68.70033600438248,
+    "8": 66.80350735840634,
+    "1": 64.41285165216165,
+    "16": 67.86820937991767
+  },
+  "production": "unchanged; restored validated 4-warp kernels",
+  "validation": "workspace tests and all 24 explicit GPU tests pass",
+  "scope": "one short prompt, greedy, 24 output tokens, five repeats after warmup; paired before/after/before except warp sweep"
+}

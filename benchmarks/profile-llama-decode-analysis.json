@@ -1,0 +1,275 @@
+{
+  "database": "D:\\ADAFORGE\\benchmarks\\profile-llama-server.sqlite",
+  "anchor_regex": "mul_mat_vec_q<\\(ggml_type\\)14, \\(int\\)1",
+  "anchor_count": 24,
+  "window_start_ns": 8657558216,
+  "window_end_ns": 8998528945,
+  "step_count": 23,
+  "steps": [
+    {
+      "wall_ms": 21.683783,
+      "tracked_gpu_ms": 10.687034,
+      "uncovered_ms": 10.996749
+    },
+    {
+      "wall_ms": 20.643136,
+      "tracked_gpu_ms": 10.818176,
+      "uncovered_ms": 9.82496
+    },
+    {
+      "wall_ms": 13.19845,
+      "tracked_gpu_ms": 10.499809,
+      "uncovered_ms": 2.698641
+    },
+    {
+      "wall_ms": 14.404058,
+      "tracked_gpu_ms": 10.524512,
+      "uncovered_ms": 3.879546
+    },
+    {
+      "wall_ms": 13.361075,
+      "tracked_gpu_ms": 10.508415,
+      "uncovered_ms": 2.85266
+    },
+    {
+      "wall_ms": 13.084561,
+      "tracked_gpu_ms": 10.503358,
+      "uncovered_ms": 2.581203
+    },
+    {
+      "wall_ms": 14.207929,
+      "tracked_gpu_ms": 11.067879,
+      "uncovered_ms": 3.14005
+    },
+    {
+      "wall_ms": 14.026999,
+      "tracked_gpu_ms": 10.5104,
+      "uncovered_ms": 3.516599
+    },
+    {
+      "wall_ms": 15.599969,
+      "tracked_gpu_ms": 11.370498,
+      "uncovered_ms": 4.229471
+    },
+    {
+      "wall_ms": 13.992791,
+      "tracked_gpu_ms": 11.059396,
+      "uncovered_ms": 2.933395
+    },
+    {
+      "wall_ms": 14.16396,
+      "tracked_gpu_ms": 11.432965,
+      "uncovered_ms": 2.730995
+    },
+    {
+      "wall_ms": 13.236915,
+      "tracked_gpu_ms": 10.507073,
+      "uncovered_ms": 2.729842
+    },
+    {
+      "wall_ms": 13.323506,
+      "tracked_gpu_ms": 10.501568,
+      "uncovered_ms": 2.821938
+    },
+    {
+      "wall_ms": 13.855191,
+      "tracked_gpu_ms": 11.440708,
+      "uncovered_ms": 2.414483
+    },
+    {
+      "wall_ms": 14.472698,
+      "tracked_gpu_ms": 10.506141,
+      "uncovered_ms": 3.966557
+    },
+    {
+      "wall_ms": 14.332025,
+      "tracked_gpu_ms": 10.532002,
+      "uncovered_ms": 3.800023
+    },
+    {
+      "wall_ms": 14.776444,
+      "tracked_gpu_ms": 10.845056,
+      "uncovered_ms": 3.931388
+    },
+    {
+      "wall_ms": 15.77949,
+      "tracked_gpu_ms": 11.526596,
+      "uncovered_ms": 4.252894
+    },
+    {
+      "wall_ms": 14.478426,
+      "tracked_gpu_ms": 10.519773,
+      "uncovered_ms": 3.958653
+    },
+    {
+      "wall_ms": 14.20108,
+      "tracked_gpu_ms": 10.507425,
+      "uncovered_ms": 3.693655
+    },
+    {
+      "wall_ms": 14.158488,
+      "tracked_gpu_ms": 10.530431,
+      "uncovered_ms": 3.628057
+    },
+    {
+      "wall_ms": 13.564469,
+      "tracked_gpu_ms": 10.500418,
+      "uncovered_ms": 3.064051
+    },
+    {
+      "wall_ms": 16.425286,
+      "tracked_gpu_ms": 11.077894,
+      "uncovered_ms": 5.347392
+    }
+  ],
+  "top_kernels": [
+    {
+      "kernel": "void mul_mat_vec_q<(ggml_type)2, (int)1, (bool)1, (bool)0, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)",
+      "instances": 1104,
+      "sum_ms": 92.443093,
+      "median_us": 82.305,
+      "max_us": 655.268,
+      "kernel_sum_percent": 37.518178804180124
+    },
+    {
+      "kernel": "void mul_mat_vec_q<(ggml_type)2, (int)1, (bool)0, (bool)0, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)",
+      "instances": 5336,
+      "sum_ms": 92.120898,
+      "median_us": 11.712,
+      "max_us": 542.083,
+      "kernel_sum_percent": 37.38741544233748
+    },
+    {
+      "kernel": "void mul_mat_vec_q<(ggml_type)14, (int)1, (bool)0, (bool)0, (bool)0>(const void *, const void *, const int *, ggml_cuda_mm_fusion_args_device, float *, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, uint3, unsigned int, unsigned int, unsigned int, unsigned int)",
+      "instances": 23,
+      "sum_ms": 23.134671,
+      "median_us": 1005.734,
+      "max_us": 1012.518,
+      "kernel_sum_percent": 9.389243641532858
+    },
+    {
+      "kernel": "void rms_norm_f32<(int)1024, (bool)1, (bool)0, (bool)0>(const float *, float *, int, int, int, long long, long long, long long, float, const float *, long long, long long, long long, uint3, uint3, uint3, uint3, const float *, long long, long long, long long, uint3, uint3, uint3, uint3, float)",
+      "instances": 2254,
+      "sum_ms": 6.986258,
+      "median_us": 2.849,
+      "max_us": 292.226,
+      "kernel_sum_percent": 2.8353841083198486
+    },
+    {
+      "kernel": "void rms_norm_f32<(int)1024, (bool)1, (bool)1, (bool)0>(const float *, float *, int, int, int, long long, long long, long long, float, const float *, long long, long long, long long, uint3, uint3, uint3, uint3, const float *, long long, long long, long long, uint3, uint3, uint3, uint3, float)",
+      "instances": 2185,
+      "sum_ms": 6.939775,
+      "median_us": 3.168,
+      "max_us": 4.256,
+      "kernel_sum_percent": 2.8165189075919295
+    },
+    {
+      "kernel": "void flash_attn_ext_vec<(int)256, (int)1, (ggml_type)1, (ggml_type)1, (bool)0>(const char *, const char *, const char *, const char *, const char *, const int *, float *, float2 *, float, float, float, float, unsigned int, float, int, uint3, int, int, int, int, int, int, int, int, int, int, int, long long, int, int, long long, int, int, int, int, int, long long)",
+      "instances": 920,
+      "sum_ms": 6.639406,
+      "median_us": 6.656,
+      "max_us": 324.802,
+      "kernel_sum_percent": 2.6946136631489206
+    },
+    {
+      "kernel": "quantize_q8_1(const float *, void *, long long, long long, long long, long long, long long, unsigned int, uint3)",
+      "instances": 6463,
+      "sum_ms": 6.448167,
+      "median_us": 0.992,
+      "max_us": 3.488,
+      "kernel_sum_percent": 2.616999005704123
+    },
+    {
+      "kernel": "void rms_norm_mul_rope_f32<(int)256, (bool)0, float>(const float *, T3 *, int, int, int, long long, long long, long long, long long, long long, long long, float, const float *, long long, long long, long long, uint3, uint3, uint3, uint3, int, const int *, float, float, float, rope_corr_dims, float, const float *, const long long *, int, bool)",
+      "instances": 1840,
+      "sum_ms": 3.404491,
+      "median_us": 1.696,
+      "max_us": 313.313,
+      "kernel_sum_percent": 1.38171817850385
+    },
+    {
+      "kernel": "void k_set_rows<float, long long, __half>(const T1 *, const T2 *, T3 *, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, long long, uint3, uint3, uint3, uint3, uint3)",
+      "instances": 2208,
+      "sum_ms": 2.343528,
+      "median_us": 1.056,
+      "max_us": 1.248,
+      "kernel_sum_percent": 0.9511246290364024
+    },
+    {
+      "kernel": "void flash_attn_ext_f16<(int)512, (int)512, (int)1, (int)8, (bool)0, (bool)0, (bool)0>(const char *, const char *, const char *, const char *, const char *, const int *, float *, float2 *, float, float, float, float, unsigned int, float, int, uint3, int, int, int, int, int, int, int, int, int, int, int, long long, int, int, long long, int, int, int, int, int, long long)",
+      "instances": 184,
+      "sum_ms": 2.059115,
+      "median_us": 11.168,
+      "max_us": 11.84,
+      "kernel_sum_percent": 0.8356951529993631
+    },
+    {
+      "kernel": "void k_bin_bcast<&op_mul, float, float, float, const float *>(const T2 *, const T3 *, T4 *, unsigned int, unsigned int, unsigned int, uint3, uint3, uint3, uint3, uint3, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, T5...)",
+      "instances": 1127,
+      "sum_ms": 1.475333,
+      "median_us": 1.12,
+      "max_us": 205.089,
+      "kernel_sum_percent": 0.5987662841366361
+    },
+    {
+      "kernel": "void rms_norm_f32<(int)256, (bool)0, (bool)0, (bool)0>(const float *, float *, int, int, int, long long, long long, long long, float, const float *, long long, long long, long long, uint3, uint3, uint3, uint3, const float *, long long, long long, long long, uint3, uint3, uint3, uint3, float)",
+      "instances": 1104,
+      "sum_ms": 1.309405,
+      "median_us": 1.152,
+      "max_us": 1.376,
+      "kernel_sum_percent": 0.531424136977843
+    },
+    {
+      "kernel": "void rms_norm_mul_rope_f32<(int)256, (bool)1, float>(const float *, T3 *, int, int, int, long long, long long, long long, long long, long long, long long, float, const float *, long long, long long, long long, uint3, uint3, uint3, uint3, int, const int *, float, float, float, rope_corr_dims, float, const float *, const long long *, int, bool)",
+      "instances": 368,
+      "sum_ms": 0.687712,
+      "median_us": 1.888,
+      "max_us": 2.08,
+      "kernel_sum_percent": 0.27910902745086996
+    },
+    {
+      "kernel": "void flash_attn_stream_k_fixup_uniform<(int)512, (int)1, (int)8>(float *, const float2 *, int, int, int, int, int, int, uint3, uint3, uint3)",
+      "instances": 184,
+      "sum_ms": 0.26189,
+      "median_us": 1.408,
+      "max_us": 1.536,
+      "kernel_sum_percent": 0.10628848006012448
+    },
+    {
+      "kernel": "softcap_f32(const float *, float *, float, float, int)",
+      "instances": 23,
+      "sum_ms": 0.06032,
+      "median_us": 2.368,
+      "max_us": 3.616,
+      "kernel_sum_percent": 0.024480969556786088
+    },
+    {
+      "kernel": "void k_get_rows_float<float, float>(const T1 *, const int *, T2 *, long long, long long, uint3, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long)",
+      "instances": 46,
+      "sum_ms": 0.05632,
+      "median_us": 1.232,
+      "max_us": 1.376,
+      "kernel_sum_percent": 0.022857563087503193
+    },
+    {
+      "kernel": "void k_bin_bcast<&op_add, float, float, float, const float *>(const T2 *, const T3 *, T4 *, unsigned int, unsigned int, unsigned int, uint3, uint3, uint3, uint3, uint3, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, T5...)",
+      "instances": 23,
+      "sum_ms": 0.025088,
+      "median_us": 1.088,
+      "max_us": 1.152,
+      "kernel_sum_percent": 0.010182005375342331
+    }
+  ],
+  "median_step_ms": {
+    "wall_ms": 14.20108,
+    "tracked_gpu_ms": 10.530431,
+    "uncovered_ms": 3.628057
+  },
+  "max_anchor_gap_ms": 21.683783,
+  "notes": [
+    "Anchor intervals are not HTTP or engine token-ready measurements.",
+    "Tracked GPU time is a union of recorded kernels/copies/memsets, without double counting.",
+    "Uncovered time has no causal attribution: host work, driver scheduling and untracked work may contribute.",
+    "Per-kernel percentages use summed kernel durations, not end-to-end wall time."
+  ]
+}

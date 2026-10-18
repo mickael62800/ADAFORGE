@@ -1,0 +1,41 @@
+{
+  "experiment": "fused RMSNorm + NeoX RoPE, FP32 shared-memory boundary",
+  "enabled_by": "ADAFORGE_EXPERIMENTAL_NORM_ROPE=1",
+  "default_enabled": false,
+  "gpu_bitwise_test": {
+    "passed": true,
+    "head_widths": [
+      256,
+      512
+    ],
+    "heads_per_case": 3,
+    "positions": [
+      0,
+      1,
+      127,
+      4095,
+      131071,
+      262143
+    ],
+    "static_and_dynamic": true
+  },
+  "graph_direct_reset_test_passed": true,
+  "full_model_cpu_oracle": {
+    "layers": 48,
+    "vocabulary": 262144,
+    "text": "Bonjour, comment vas-tu ?",
+    "atol": 0.0001,
+    "rtol": 0.0001,
+    "max_errors": {
+      "final_norm": 8.223e-05,
+      "raw_logits": 5.98e-05,
+      "capped_logits": 5.519e-05
+    },
+    "max_tolerance_ratios": {
+      "final_norm": 0.29132,
+      "raw_logits": 0.42836,
+      "capped_logits": 0.42835
+    },
+    "passed": true
+  }
+}

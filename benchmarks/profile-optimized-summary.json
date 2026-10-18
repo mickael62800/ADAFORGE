@@ -1,0 +1,14 @@
+{
+  "capture": "profile-optimized-nodes.nsys-rep",
+  "scope": "one warmup plus one measured request; 20 prompt and 24 generated tokens each; CUDA graph node tracing; percentages are kernel time, not end-to-end decode time",
+  "kernel_time_percent": {
+    "q4_gate_up": 37.7,
+    "q4_matvec": 26.1,
+    "q4_qkv": 10.8,
+    "rms_norm": 10.2,
+    "q6_matvec": 6.5,
+    "attention_dynamic": 5.5
+  },
+  "q4_total_percent": 74.6,
+  "next_experiment": "Lossless GPU Q4 weight repacking and aligned/coalesced loads, with CPU validation and paired end-to-end measurements before adoption"
+}
