@@ -289,9 +289,17 @@ impl ResidentHead {
         })?;
         Ok(Self {
             selection: super::greedy::GpuGreedy::new(stream.clone(), rows)?,
+            // Per batch size, the faster of two bit-identical variants
+            // (measured: the two-pass kernel wins at 4 and 8 tokens).
             batch_project: if packed {
                 (1..=8)
-                    .map(|b| load(&format!("q6_matvec_raw_packed_b{b}")))
+                    .map(|b| {
+                        load(&if b == 4 || b == 8 {
+                            format!("q6_matvec_raw_packed2_b{b}")
+                        } else {
+                            format!("q6_matvec_raw_packed_b{b}")
+                        })
+                    })
                     .collect::<Result<Vec<_>, _>>()?
             } else {
                 Vec::new()
@@ -897,6 +905,22 @@ mod tests {
                     assert_eq!(got[i].to_bits(), expected[i].to_bits(), "{columns}x{rows} n={n} i={i}");
                 }
                 report += &format!(" n{n}={best:.3}ms");
+                let f2 = module.load_function(&format!("q6_matvec_raw_packed2_b{n}")).unwrap();
+                let mut best2 = f32::MAX;
+                for _ in 0..3 {
+                    let e0 = stream.record_event(Some(sys::CUevent_flags::CU_EVENT_DEFAULT)).unwrap();
+                    let mut l = stream.launch_builder(&f2);
+                    l.arg(&codes).arg(&d).arg(&xs).arg(&mut out).arg(&columns).arg(&rows);
+                    // SAFETY: x holds 8 tokens, out 8*rows floats.
+                    unsafe { l.launch(cfg) }.unwrap();
+                    let e1 = stream.record_event(Some(sys::CUevent_flags::CU_EVENT_DEFAULT)).unwrap();
+                    best2 = best2.min(e0.elapsed_ms(&e1).unwrap());
+                }
+                let got = stream.clone_dtoh(&out).unwrap();
+                for i in 0..(n * rows) as usize {
+                    assert_eq!(got[i].to_bits(), expected[i].to_bits(), "two-pass {columns}x{rows} n={n} i={i}");
+                }
+                report += &format!("/{best2:.3}");
             }
             println!("Q6BATCH {columns}x{rows}:{report}");
         }
