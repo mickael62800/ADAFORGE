@@ -495,7 +495,7 @@ pub fn open_chat(
     })
 }
 /// Chat context window in tokens (prompt history + answer).
-pub const CHAT_CONTEXT: u32 = 10240;
+pub const CHAT_CONTEXT: u32 = 32768;
 
 #[cfg(test)]
 mod chat_tests {

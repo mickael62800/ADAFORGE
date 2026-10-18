@@ -12,9 +12,10 @@ use std::sync::Arc;
 #[cfg(test)]
 use cudarc::nvrtc::{CompileOptions, compile_ptx_with_opts};
 
-/// Longest supported context. Attention keeps one f32 score per visible
-/// token in shared memory: 10240 * 4 bytes = 40 KiB, under the 48 KiB default.
-pub(crate) const MAX_CONTEXT: u32 = 10240;
+/// Longest supported context. The split attention keeps its scores in a
+/// global buffer (q_heads x MAX_CONTEXT floats per layer); sliding-window
+/// layers use a circular K/V cache, so only the global layers grow with it.
+pub(crate) const MAX_CONTEXT: u32 = 32768;
 // Diagnostic-only profiler windows: skip the benchmark warmup by default.
 static PROFILE_GENERATIONS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 

@@ -12,9 +12,9 @@ root=Path(__file__).resolve().parents[1]
 exe=str(root/'target/release/adaforge.exe')
 first='Mon prénom est Luc.'
 second='Quel est mon prénom ?'
-# More tokens than the 10240-token context (digits are one token each) but under
+# More tokens than the 32768-token context (digits are one token each) but under
 # the 64 KiB text limit: the turn is refused before any compute.
-lines=first+'\n'+('1234567890'*1200)+'\n'+second+'\n/reset\nBonjour, comment vas-tu ?\n/quit\n'
+lines=first+'\n'+('1234567890'*3400)+'\n'+second+'\n/reset\nBonjour, comment vas-tu ?\n/quit\n'
 result=subprocess.run([exe,'chat',str(args.model),'64'],input=lines,capture_output=True,encoding='utf-8',check=True)
 answers=re.findall(r'\nAssistant : (.*?)(?=\nVous >|\Z)',result.stdout,re.S)
 assert len(answers)==3,repr(result.stdout)

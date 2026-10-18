@@ -13,7 +13,7 @@ Objectif : augmenter au maximum le nombre de tokens par seconde d'AdaForge sur R
 | Premier token, prompt de 20 tokens | 210 ms | **~37 ms** |
 | Prefill d'un prompt de 7 620 tokens | 95 s | **~16,5 s** |
 | Chargement du modèle | ~9,5 s | **~5,5 s** (jusqu'à 7 s si le fichier n'est pas en cache disque) |
-| Contexte maximal du chat | 512 tokens | **10 240 tokens** |
+| Contexte maximal du chat | 512 tokens | **32 768 tokens** (cache KV circulaire) |
 
 Tout est commité et fusionné dans `master`. Tous les tests du workspace (y compris les tests GPU), Clippy, `verify_generation.py` et `verify_chat.py` passent.
 

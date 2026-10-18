@@ -8,6 +8,9 @@ use std::sync::Arc;
 #[cfg(test)]
 use cudarc::nvrtc::{CompileOptions, compile_ptx_with_opts};
 
+/// The single-kernel attention keeps one f32 score per visible token in
+/// shared memory (48 KiB by default).
+const FALLBACK_MAX_TOKENS: u32 = 12288;
 pub(crate) struct AttentionKernel {
     parallel_exp: bool,
     stream: Arc<CudaStream>,
@@ -127,6 +130,11 @@ impl AttentionKernel {
             ));
         }
         let range = c.visible_range(tokens, position).map_err(DiagnosticError)?;
+        if self.split.is_none() && range.len() > FALLBACK_MAX_TOKENS as usize {
+            return Err(DiagnosticError(format!(
+                "L'attention non scindée est limitée à {FALLBACK_MAX_TOKENS} tokens (mémoire partagée)"
+            )));
+        }
         if self.split.is_some() {
             let blocks = (range.len() as u32).div_ceil(16).clamp(1, 32);
             return self.launch_split(query, keys, values, tokens, position, None, blocks, ring);
@@ -329,6 +337,11 @@ impl AttentionKernel {
         let kvheads = c.kv_heads();
         let window = c.window().unwrap_or(0);
         let scale = c.scale();
+        if capacity > FALLBACK_MAX_TOKENS {
+            return Err(DiagnosticError(format!(
+                "L'attention non scindée est limitée à {FALLBACK_MAX_TOKENS} tokens (mémoire partagée)"
+            )));
+        }
         let mut launch = self.stream.launch_builder(&self.dynamic);
         launch
             .arg(query)
