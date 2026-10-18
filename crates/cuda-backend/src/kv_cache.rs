@@ -100,6 +100,16 @@ impl KvCache {
             Ok(())
         }
     }
+    /// Records `tokens` entries written directly into the buffers (batched
+    /// prefill) starting at `position`, which must be the current length.
+    pub(crate) fn commit_batch(&mut self, position: u32, tokens: u32) -> Result<(), DiagnosticError> {
+        self.ensure_valid()?;
+        if self.state.len() != position {
+            return Err(DiagnosticError("Position cache lot invalide".into()));
+        }
+        self.state.append_range(tokens).map_err(DiagnosticError)?;
+        self.state.commit(tokens).map_err(DiagnosticError)
+    }
     pub(crate) fn truncate(&mut self, len: u32) -> Result<(), DiagnosticError> {
         self.ensure_valid()?;
         self.state.truncate(len).map_err(DiagnosticError)

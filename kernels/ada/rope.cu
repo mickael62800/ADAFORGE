@@ -77,3 +77,13 @@ extern "C" __global__ void prepare_qkv_cache_dynamic(const float* q,const float*
     unsigned long long offset=(unsigned long long)state[1]*kvheads*width;
     prepare_qkv_impl(q,k,v,qw,kw,vw,freq,qo,keys+offset,values+offset,width,qheads,kvheads,qe,ke,ve,state[1]);
 }
+
+// Batched prefill: blockIdx.y = token t of the batch (position start+t).
+// Inputs are [n][rows]; Q goes to qo[t], K/V straight into the cache slot.
+// Per (head, token) this is prepare_qkv_impl unchanged: bit-identical.
+extern "C" __global__ void prepare_qkv_batch(const float* q,const float* k,const float* v,const float* qw,const float* kw,const float* vw,const double* freq,float* qo,float* keys,float* values,unsigned int width,unsigned int qheads,unsigned int kvheads,float qe,float ke,float ve,unsigned int start){
+    const unsigned int t=blockIdx.y;
+    const unsigned long long qrows=(unsigned long long)qheads*width,kvrows=(unsigned long long)kvheads*width;
+    const unsigned long long slot=(unsigned long long)(start+t)*kvrows;
+    prepare_qkv_impl(q+t*qrows,k+t*kvrows,v+t*kvrows,qw,kw,vw,freq,qo+t*qrows,keys+slot,values+slot,width,qheads,kvheads,qe,ke,ve,start+t);
+}

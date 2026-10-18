@@ -27,6 +27,7 @@ struct ResidentLayer {
     prepare_qkv_cache_dynamic: CudaFunction,
     grouped_qkv_prep: bool,
     prepare_qkv: CudaFunction,
+    prepare_qkv_batch: CudaFunction,
     prepare_qkv_dynamic: CudaFunction,
     fused_norm_rope: bool,
     norm_rotary: CudaFunction,
@@ -170,6 +171,7 @@ impl ResidentLayer {
             grouped_qkv_prep: std::env::var("ADAFORGE_EXPERIMENTAL_QKV_PREP").as_deref() != Ok("0")
                 && matches!(w.rope.width(), 256 | 512),
             prepare_qkv: load("prepare_qkv")?,
+            prepare_qkv_batch: load("prepare_qkv_batch")?,
             prepare_qkv_dynamic: load("prepare_qkv_dynamic")?,
             fused_norm_rope: std::env::var("ADAFORGE_EXPERIMENTAL_NORM_ROPE").as_deref() == Ok("1")
                 && matches!(w.rope.width(), 256 | 512),
@@ -490,7 +492,44 @@ impl ResidentLayer {
         }
         let qwidth = self.rows[0];
         let batched_attention = self.attention.supports_batch();
-        for t in 0..n {
+        if batched_attention && self.grouped_qkv_prep {
+            // One launch prepares Q/K/V for every token and writes K/V into the cache.
+            let qheads = self.rows[0] / self.head_width;
+            let kvheads = self.rows[1] / self.head_width;
+            let vsource = if self.shared_kv != 0 { 1 } else { 2 };
+            let (keys, values) = self.cache.graph_buffers()?;
+            let mut launch = self.stream.launch_builder(&self.prepare_qkv_batch);
+            launch
+                .arg(&buf.raw[0])
+                .arg(&buf.raw[1])
+                .arg(&buf.raw[vsource])
+                .arg(&self.scales[1])
+                .arg(&self.scales[2])
+                .arg(&self.scales[3])
+                .arg(&self.freq)
+                .arg(&mut buf.queries)
+                .arg(keys)
+                .arg(values)
+                .arg(&self.head_width)
+                .arg(&qheads)
+                .arg(&kvheads)
+                .arg(&self.eps[1])
+                .arg(&self.eps[2])
+                .arg(&self.eps[3])
+                .arg(&start);
+            // SAFETY: start + n <= capacity (checked above), raw/queries hold n rows,
+            // one 256-thread block per (head, token), disjoint outputs.
+            unsafe {
+                launch.launch(LaunchConfig {
+                    grid_dim: (qheads + 2 * kvheads, n, 1),
+                    block_dim: (256, 1, 1),
+                    shared_mem_bytes: 0,
+                })
+            }
+            .map_err(|e| failure("Préparation QKV lot", e))?;
+            self.cache.commit_batch(start, n)?;
+        }
+        for t in 0..if batched_attention && self.grouped_qkv_prep { 0 } else { n } {
             for i in 0..projections {
                 let rows = self.rows[i] as usize;
                 let src = buf.raw[i].slice(t as usize * rows..(t as usize + 1) * rows);
