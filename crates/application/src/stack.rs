@@ -464,8 +464,13 @@ pub fn open_chat(
             "Génération limitée à 1 à 128 nouveaux tokens".into(),
         ));
     }
+    let diagnostics = std::env::var("ADAFORGE_DIAGNOSTICS").as_deref() == Ok("1");
+    let started = std::time::Instant::now();
     let tokenizer = inspector.read_tokenizer(path)?;
     let model = load_generation(inspector, path, &tokenizer)?;
+    if diagnostics {
+        eprintln!("LOAD_PHASE {{\"file_and_parse_ms\":{:.0}}}", started.elapsed().as_secs_f64() * 1000.0);
+    }
     let weights = model
         .layers
         .iter()

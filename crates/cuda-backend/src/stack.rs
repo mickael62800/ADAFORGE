@@ -6,10 +6,11 @@ use super::{
 use adaforge_application::{DiagnosticError, LayerWeights, OutputBranchReport, StackReport};
 use adaforge_domain::{EmbeddingBatch, KvLayout, RmsNorm};
 use cudarc::{
-    driver::{CudaContext, CudaFunction, CudaSlice, CudaStream, LaunchConfig, PushKernelArg, sys},
-    nvrtc::{CompileOptions, compile_ptx_with_opts},
+    driver::{CudaContext, CudaFunction, CudaSlice, CudaStream, LaunchConfig, PushKernelArg, sys}
 };
 use std::sync::Arc;
+#[cfg(test)]
+use cudarc::nvrtc::{CompileOptions, compile_ptx_with_opts};
 
 /// Longest supported context. Attention keeps one f32 score per visible
 /// token in shared memory: 10240 * 4 bytes = 40 KiB, under the 48 KiB default.
@@ -94,18 +95,7 @@ impl ResidentLayer {
             include_str!("../../../kernels/ada/q4_matvec.cu"),
             include_str!("../../../kernels/ada/rope.cu")
         );
-        let ptx = compile_ptx_with_opts(
-            source,
-            CompileOptions {
-                arch: Some("compute_89"),
-                ..Default::default()
-            },
-        )
-        .map_err(|e| failure("Compilation bloc résident", e))?;
-        let module = stream
-            .context()
-            .load_module(ptx)
-            .map_err(|e| failure("Module bloc", e))?;
+        let module = super::cached_module(&stream, source, "Compilation bloc résident")?;
         let load = |name| {
             module
                 .load_function(name)
@@ -851,11 +841,21 @@ pub(crate) fn open_session(
     // Explicit stream ordering covers all kernel, copy, graph and host read dependencies.
     unsafe { ctx.disable_event_tracking() };
     let stream = ctx.new_stream().map_err(|e| failure("Stream session", e))?;
+    let layers_started = std::time::Instant::now();
     let layers = weights
         .iter()
         .map(|w| ResidentLayer::new(stream.clone(), w, capacity))
         .collect::<Result<Vec<_>, _>>()?;
+    let phase = |name: &str, since: std::time::Instant| {
+        if std::env::var("ADAFORGE_DIAGNOSTICS").as_deref() == Ok("1") {
+            let _ = stream.synchronize();
+            eprintln!("LOAD_PHASE {{\"{name}_ms\":{:.0}}}", since.elapsed().as_secs_f64() * 1000.0);
+        }
+    };
+    phase("layers", layers_started);
+    let t = std::time::Instant::now();
     let head = super::logits::ResidentHead::new(stream.clone(), head)?;
+    phase("head", t);
     let input = stream
         .alloc_zeros::<f32>(width as usize)
         .map_err(|e| failure("Entrée génération", e))?;
@@ -874,10 +874,14 @@ pub(crate) fn open_session(
         poisoned: false,
         batch: None,
     };
+    let t = std::time::Instant::now();
     session.setup_batch()?;
+    phase("batch", t);
+    let t = std::time::Instant::now();
     if std::env::var_os("ADAFORGE_DISABLE_GRAPHS").is_none() {
         session.capture_graph()?;
     }
+    phase("graph", t);
     if std::env::var("ADAFORGE_DIAGNOSTICS").as_deref() == Ok("1") {
         let qkv = session.layers.iter().filter(|l| l.qkv_kparallel).count();
         let output = session

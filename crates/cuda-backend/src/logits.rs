@@ -287,6 +287,22 @@ impl ResidentHead {
         } else {
             "lookup_dynamic"
         })?;
+        // The lossless repack is computed once for both buffers.
+        let (weights, dscales) = if packed {
+            let (codes, d) = pack_q6_lanes(head.matrix.bytes());
+            (
+                stream
+                    .clone_htod(&codes)
+                    .map_err(|e| failure("Poids Q6_K", e))?,
+                Some(
+                    stream
+                        .clone_htod(&d)
+                        .map_err(|e| failure("Échelles Q6_K", e))?,
+                ),
+            )
+        } else {
+            (upload_weights(&stream, &head, tiled)?, None)
+        };
         Ok(Self {
             selection: super::greedy::GpuGreedy::new(stream.clone(), rows)?,
             // Per batch size, the faster of two bit-identical variants
@@ -316,22 +332,8 @@ impl ResidentHead {
             eps: head.norm.epsilon(),
             cap: head.cap,
             projection_rows: if tiled { 4 } else { projection_rows() },
-            weights: if packed {
-                stream
-                    .clone_htod(&pack_q6_lanes(head.matrix.bytes()).0)
-                    .map_err(|e| failure("Poids Q6_K", e))?
-            } else {
-                upload_weights(&stream, &head, tiled)?
-            },
-            dscales: if packed {
-                Some(
-                    stream
-                        .clone_htod(&pack_q6_lanes(head.matrix.bytes()).1)
-                        .map_err(|e| failure("Échelles Q6_K", e))?,
-                )
-            } else {
-                None
-            },
+            weights,
+            dscales,
             scales: stream
                 .clone_htod(head.norm.weights())
                 .map_err(|e| failure("Norme résidente", e))?,

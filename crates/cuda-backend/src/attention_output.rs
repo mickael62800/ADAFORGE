@@ -2,8 +2,7 @@ use super::failure;
 use adaforge_application::DiagnosticError;
 use adaforge_domain::AttentionOutput;
 use cudarc::{
-    driver::{CudaFunction, CudaSlice, CudaStream, LaunchConfig, PushKernelArg},
-    nvrtc::{CompileOptions, compile_ptx_with_opts},
+    driver::{CudaFunction, CudaSlice, CudaStream, LaunchConfig, PushKernelArg}
 };
 use std::sync::Arc;
 
@@ -37,18 +36,7 @@ impl OutputKernel {
             include_str!("../../../kernels/ada/rms_norm.cu"),
             include_str!("../../../kernels/ada/vector_add.cu")
         );
-        let ptx = compile_ptx_with_opts(
-            source,
-            CompileOptions {
-                arch: Some("compute_89"),
-                ..Default::default()
-            },
-        )
-        .map_err(|e| failure("Compilation sortie attention", e))?;
-        let module = stream
-            .context()
-            .load_module(ptx)
-            .map_err(|e| failure("Module sortie", e))?;
+        let module = super::cached_module(&stream, source, "Compilation sortie attention")?;
         let kparallel = matches!(
             std::env::var("ADAFORGE_EXPERIMENTAL_KPAR_PROJECTIONS").as_deref(),
             Ok("1" | "output")

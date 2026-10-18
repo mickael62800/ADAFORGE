@@ -2,10 +2,11 @@ use super::{failure, kv_cache::KvCache};
 use adaforge_application::DiagnosticError;
 use adaforge_domain::AttentionConfig;
 use cudarc::{
-    driver::{CudaFunction, CudaSlice, CudaStream, LaunchConfig, PushKernelArg},
-    nvrtc::{CompileOptions, compile_ptx_with_opts},
+    driver::{CudaFunction, CudaSlice, CudaStream, LaunchConfig, PushKernelArg}
 };
 use std::sync::Arc;
+#[cfg(test)]
+use cudarc::nvrtc::{CompileOptions, compile_ptx_with_opts};
 
 pub(crate) struct AttentionKernel {
     parallel_exp: bool,
@@ -32,18 +33,11 @@ impl AttentionKernel {
         stream: Arc<CudaStream>,
         config: AttentionConfig,
     ) -> Result<Self, DiagnosticError> {
-        let ptx = compile_ptx_with_opts(
-            include_str!("../../../kernels/ada/attention.cu"),
-            CompileOptions {
-                arch: Some("compute_89"),
-                ..Default::default()
-            },
-        )
-        .map_err(|e| failure("Compilation attention", e))?;
-        let module = stream
-            .context()
-            .load_module(ptx)
-            .map_err(|e| failure("Module attention", e))?;
+        let module = super::cached_module(
+            &stream,
+            include_str!("../../../kernels/ada/attention.cu").to_string(),
+            "Compilation attention",
+        )?;
         let parallel_exp =
             std::env::var("ADAFORGE_EXPERIMENTAL_ATTENTION_EXP").as_deref() == Ok("1");
         let function = module

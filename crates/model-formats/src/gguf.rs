@@ -15,10 +15,12 @@ struct CachedIndex {
     path: std::path::PathBuf,
     size: u64,
     modified: std::time::SystemTime,
-    info: ModelInfo,
+    info: std::rc::Rc<ModelInfo>,
 }
 impl GgufInspector {
-    fn index(&self, path: &Path, file: &File) -> io::Result<ModelInfo> {
+    /// Parsed header, cached per file and shared (never cloned: the metadata
+    /// holds the whole 262k-token vocabulary).
+    fn index(&self, path: &Path, file: &File) -> io::Result<std::rc::Rc<ModelInfo>> {
         let metadata = file.metadata()?;
         let size = metadata.len();
         let modified = metadata.modified()?;
@@ -30,7 +32,7 @@ impl GgufInspector {
         {
             return Ok(cached.info.clone());
         }
-        let info = parse(BufReader::new(file.try_clone()?), size)?;
+        let info = std::rc::Rc::new(parse(BufReader::new(file.try_clone()?), size)?);
         *self.index.borrow_mut() = Some(CachedIndex {
             path,
             size,
@@ -321,6 +323,7 @@ impl ModelInspector for GgufInspector {
         let file =
             File::open(path).map_err(|e| DiagnosticError(format!("{}: {e}", path.display())))?;
         self.index(path, &file)
+            .map(|info| (*info).clone())
             .map_err(|e| DiagnosticError(format!("GGUF {}: {e}", path.display())))
     }
 }

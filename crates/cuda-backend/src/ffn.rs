@@ -2,8 +2,7 @@ use super::failure;
 use adaforge_application::DiagnosticError;
 use adaforge_domain::Ffn;
 use cudarc::{
-    driver::{CudaFunction, CudaSlice, CudaStream, LaunchConfig, PushKernelArg},
-    nvrtc::{CompileOptions, compile_ptx_with_opts},
+    driver::{CudaFunction, CudaSlice, CudaStream, LaunchConfig, PushKernelArg}
 };
 use std::sync::Arc;
 pub(crate) struct FfnKernel {
@@ -118,18 +117,7 @@ impl FfnKernel {
         } else {
             source
         };
-        let ptx = compile_ptx_with_opts(
-            source,
-            CompileOptions {
-                arch: Some("compute_89"),
-                ..Default::default()
-            },
-        )
-        .map_err(|e| failure("Compilation FFN", e))?;
-        let module = stream
-            .context()
-            .load_module(ptx)
-            .map_err(|e| failure("Module FFN", e))?;
+        let module = super::cached_module(&stream, source, "Compilation FFN")?;
         let load = |name| {
             module
                 .load_function(name)

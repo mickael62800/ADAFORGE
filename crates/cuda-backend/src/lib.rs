@@ -27,6 +27,38 @@ fn failure(stage: &str, error: impl std::fmt::Debug) -> DiagnosticError {
     DiagnosticError(format!("{stage}: {error:?}"))
 }
 
+/// Compiles (NVRTC, sm_89) and loads `source` once per CUDA context and
+/// thread; later calls with the same source share the module. The 48 layers
+/// build identical modules, so this removes almost all load-time compiles.
+fn cached_module(
+    stream: &std::sync::Arc<cudarc::driver::CudaStream>,
+    source: String,
+    stage: &str,
+) -> Result<std::sync::Arc<cudarc::driver::CudaModule>, DiagnosticError> {
+    use std::{cell::RefCell, collections::HashMap, sync::Arc};
+    type Entry = (Arc<CudaContext>, Arc<cudarc::driver::CudaModule>);
+    thread_local! {
+        static CACHE: RefCell<HashMap<(usize, String), Entry>> = RefCell::new(HashMap::new());
+    }
+    let ctx = stream.context().clone();
+    // The context is kept alive by the entry, so its address stays unique.
+    let key = (Arc::as_ptr(&ctx) as usize, source);
+    if let Some(module) = CACHE.with(|c| c.borrow().get(&key).map(|(_, m)| m.clone())) {
+        return Ok(module);
+    }
+    let ptx = compile_ptx_with_opts(
+        key.1.clone(),
+        CompileOptions {
+            arch: Some("compute_89"),
+            ..Default::default()
+        },
+    )
+    .map_err(|e| failure(stage, e))?;
+    let module = ctx.load_module(ptx).map_err(|e| failure(stage, e))?;
+    CACHE.with(|c| c.borrow_mut().insert(key, (ctx, module.clone())));
+    Ok(module)
+}
+
 impl GpuDiagnostics for CudaDiagnostics {
     fn open_session(
         &self,
