@@ -565,3 +565,17 @@ extern "C" __global__ void q6_matvec_raw_packed2_b5(const unsigned char* c,const
 extern "C" __global__ void q6_matvec_raw_packed2_b6(const unsigned char* c,const unsigned short* d,const float* x,float* raw,unsigned int columns,unsigned int rows){q6_project_packed_batch2<6>(c,d,x,raw,columns,rows);}
 extern "C" __global__ void q6_matvec_raw_packed2_b7(const unsigned char* c,const unsigned short* d,const float* x,float* raw,unsigned int columns,unsigned int rows){q6_project_packed_batch2<7>(c,d,x,raw,columns,rows);}
 extern "C" __global__ void q6_matvec_raw_packed2_b8(const unsigned char* c,const unsigned short* d,const float* x,float* raw,unsigned int columns,unsigned int rows){q6_project_packed_batch2<8>(c,d,x,raw,columns,rows);}
+
+// Load-time repack of GGUF Q6_K blocks (210 bytes) into the packed layout:
+// pure byte moves, identical to pack_q6_lanes. One thread per output byte
+// of the 208-byte packed block (d halves are written by thread 0).
+extern "C" __global__ void q6_pack_lanes(const unsigned char* src,unsigned char* codes,unsigned short* dv,unsigned long long blocks){
+    const unsigned long long i=(unsigned long long)blockIdx.x*blockDim.x+threadIdx.x;
+    if(i>=blocks*208)return;
+    const unsigned long long block=i/208;const unsigned int o=(unsigned int)(i%208);
+    const unsigned char* s=src+block*210;
+    unsigned int from=o;
+    if(o<192){const unsigned int k=(o/64)*4+(o%4),lane=(o%64)/4;from=k*16+lane;}
+    codes[i]=s[from];
+    if(o==0)dv[block]=(unsigned short)(s[208]|(s[209]<<8));
+}

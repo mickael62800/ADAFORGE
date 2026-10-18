@@ -44,6 +44,7 @@ fn packed_q6() -> bool {
     std::env::var("ADAFORGE_Q6_PACKED").as_deref() != Ok("0")
 }
 /// Returns (codes: 208 bytes per block, d halves per block).
+#[cfg(test)]
 pub(crate) fn pack_q6_lanes(bytes: &[u8]) -> (Vec<u8>, Vec<u16>) {
     let blocks = bytes.len() / 210;
     let mut codes = vec![0u8; blocks * 208];
@@ -289,17 +290,30 @@ impl ResidentHead {
         })?;
         // The lossless repack is computed once for both buffers.
         let (weights, dscales) = if packed {
-            let (codes, d) = pack_q6_lanes(head.matrix.bytes());
-            (
-                stream
-                    .clone_htod(&codes)
-                    .map_err(|e| failure("Poids Q6_K", e))?,
-                Some(
-                    stream
-                        .clone_htod(&d)
-                        .map_err(|e| failure("Échelles Q6_K", e))?,
-                ),
-            )
+            // Repacked on the GPU (byte moves identical to pack_q6_lanes).
+            let raw = stream
+                .clone_htod(head.matrix.bytes())
+                .map_err(|e| failure("Poids Q6_K bruts", e))?;
+            let blocks = (head.matrix.bytes().len() / 210) as u64;
+            let mut codes = stream
+                .alloc_zeros::<u8>(blocks as usize * 208)
+                .map_err(|e| failure("Poids Q6_K", e))?;
+            let mut d = stream
+                .alloc_zeros::<u16>(blocks as usize)
+                .map_err(|e| failure("Échelles Q6_K", e))?;
+            let pack = load("q6_pack_lanes")?;
+            let mut launch = stream.launch_builder(&pack);
+            launch.arg(&raw).arg(&mut codes).arg(&mut d).arg(&blocks);
+            // SAFETY: raw holds blocks*210 bytes, codes blocks*208, d blocks; bounded threads.
+            unsafe {
+                launch.launch(LaunchConfig {
+                    grid_dim: ((blocks * 208).div_ceil(256) as u32, 1, 1),
+                    block_dim: (256, 1, 1),
+                    shared_mem_bytes: 0,
+                })
+            }
+            .map_err(|e| failure("Repack Q6_K", e))?;
+            (codes, Some(d))
         } else {
             (upload_weights(&stream, &head, tiled)?, None)
         };
@@ -994,5 +1008,38 @@ mod tests {
             assert!(a.0.iter().zip(&b.0).all(|(x, y)| x.to_bits() == y.to_bits()), "dual {columns}x{rows}");
             println!("DUAL {columns}x{rows}: single {:.3}ms dual {:.3}ms", a.1, b.1);
         }
+    }
+    #[test]
+    #[ignore = "Requires RTX 4090 and CUDA"]
+    fn gpu_q6_pack_matches_host_pack() {
+        use cudarc::driver::{CudaContext, LaunchConfig, PushKernelArg};
+        let ctx = CudaContext::new(0).unwrap();
+        let stream = ctx.default_stream();
+        let source = format!(
+            "{}
+{}
+{}",
+            include_str!("../../../kernels/ada/embedding_q6.cu"),
+            include_str!("../../../kernels/ada/q6_matvec.cu"),
+            include_str!("../../../kernels/ada/q6_packed.cu")
+        );
+        let ptx = cudarc::nvrtc::compile_ptx_with_opts(
+            source,
+            cudarc::nvrtc::CompileOptions { arch: Some("compute_89"), ..Default::default() },
+        )
+        .unwrap();
+        let f = ctx.load_module(ptx).unwrap().load_function("q6_pack_lanes").unwrap();
+        let bytes: Vec<u8> = (0..1000u32 * 210).map(|i| (i.wrapping_mul(2654435761) >> 13) as u8).collect();
+        let (codes, d) = pack_q6_lanes(&bytes);
+        let raw = stream.clone_htod(&bytes).unwrap();
+        let blocks = 1000u64;
+        let mut gc = stream.alloc_zeros::<u8>(1000 * 208).unwrap();
+        let mut gd = stream.alloc_zeros::<u16>(1000).unwrap();
+        let mut l = stream.launch_builder(&f);
+        l.arg(&raw).arg(&mut gc).arg(&mut gd).arg(&blocks);
+        // SAFETY: buffers sized for 1000 blocks.
+        unsafe { l.launch(LaunchConfig { grid_dim: ((1000 * 208u32).div_ceil(256), 1, 1), block_dim: (256, 1, 1), shared_mem_bytes: 0 }) }.unwrap();
+        assert_eq!(stream.clone_dtoh(&gc).unwrap(), codes);
+        assert_eq!(stream.clone_dtoh(&gd).unwrap(), d);
     }
 }
