@@ -38,7 +38,36 @@ pub(crate) struct FfnKernel {
 pub(crate) fn fused_rms() -> bool {
     std::env::var("ADAFORGE_FUSED_RMS").as_deref() != Ok("0")
 }
+/// Weights and constants needed by the batched FFN (tiled gate path only).
+pub(crate) struct FfnBatchParts<'a> {
+    pub codes: &'a CudaSlice<u16>,
+    pub tile_scales: &'a CudaSlice<u16>,
+    pub down: &'a CudaSlice<u8>,
+    pub pre_scale: &'a CudaSlice<f32>,
+    pub pre_eps: f32,
+    pub post_scale: &'a CudaSlice<f32>,
+    pub post_eps: f32,
+    pub layer_scale: f32,
+    pub intermediate: u32,
+}
 impl FfnKernel {
+    pub(crate) fn batch_parts(&self) -> Option<FfnBatchParts<'_>> {
+        if self.q8.is_some() || self.fused_gelu.is_some() {
+            return None;
+        }
+        let (_, codes, tile_scales) = self.tiled_gate.as_ref()?;
+        Some(FfnBatchParts {
+            codes,
+            tile_scales,
+            down: &self.down_weights,
+            pre_scale: &self.pre_scale,
+            pre_eps: self.pre_eps,
+            post_scale: &self.post_scale,
+            post_eps: self.post_eps,
+            layer_scale: self.layer_scale,
+            intermediate: self.intermediate,
+        })
+    }
     pub(crate) fn strategy_name(&self) -> &'static str {
         if self.q8.is_some() {
             "q8"
@@ -441,6 +470,9 @@ impl FfnKernel {
     }
     pub(crate) fn output(&self) -> &CudaSlice<f32> {
         &self.output
+    }
+    pub(crate) fn output_mut(&mut self) -> &mut CudaSlice<f32> {
+        &mut self.output
     }
     pub(crate) fn snapshot(&self) -> Result<Vec<f32>, DiagnosticError> {
         let out = self

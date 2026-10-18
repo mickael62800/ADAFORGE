@@ -8,6 +8,7 @@ use cudarc::{
 
 mod attention;
 mod attention_output;
+mod batch;
 mod embedding;
 mod ffn;
 mod greedy;

@@ -505,4 +505,94 @@ mod tests {
             }
         }
     }
+    #[test]
+    #[ignore = "Requires RTX 4090 and CUDA"]
+    fn batched_q4_matches_single_token_bits_and_amortizes_weights() {
+        let ctx = CudaContext::new(0).unwrap();
+        let stream = ctx.default_stream();
+        let ptx = compile_ptx_with_opts(
+            format!(
+                "{}
+{}
+{}",
+                include_str!("../../../kernels/ada/q4_matvec.cu"),
+                include_str!("../../../kernels/ada/q4_tiled_probe.cu"),
+                include_str!("../../../kernels/ada/q4_batch.cu")
+            ),
+            CompileOptions { arch: Some("compute_89"), ..Default::default() },
+        )
+        .unwrap();
+        let module = ctx.load_module(ptx).unwrap();
+        for (columns, rows) in [(96u32, 5u32), (3840, 8192), (15360, 3840)] {
+            let mut state = 0x51ed_270bu32 ^ columns;
+            let mut next = || {
+                state ^= state << 13;
+                state ^= state >> 17;
+                state ^= state << 5;
+                state
+            };
+            let mut bytes = Vec::new();
+            for _ in 0..rows * columns / 32 {
+                let r = next();
+                let scale = (((r >> 16) & 0x8000) | (0x1000 + (r & 0x3fff) % 0x3000)) as u16;
+                bytes.extend(scale.to_le_bytes());
+                bytes.extend((0..16).map(|_| next() as u8));
+            }
+            let matrix = Q4Matrix::new(columns, rows, bytes).unwrap();
+            let x: Vec<f32> = (0..columns * 8).map(|_| (next() % 65536) as f32 / 32768.0 - 1.0).collect();
+            let copies = (320usize << 20).div_ceil(matrix.bytes().len()).clamp(1, 64);
+            let weights: Vec<_> = (0..copies).map(|_| stream.clone_htod(matrix.bytes()).unwrap()).collect();
+            // Batched kernels read x permuted by group (see q4_permute_x).
+            let permuted: Vec<f32> = (0..x.len())
+                .map(|i| {
+                    let (base, o) = (i & !31, i & 31);
+                    let (p, k) = (o / 4, o % 4);
+                    x[base + 2 * p + (k & 1) + (k >> 1) * 16]
+                })
+                .collect();
+            let xs = stream.clone_htod(&permuted).unwrap();
+            for (kpar, single, batch) in [(false, "q4_matvec", "q4_batch_matvec_b"), (true, "q4_matvec_kparallel", "q4_batch_kparallel_b")] {
+                let grid = if kpar { rows } else { rows.div_ceil(4) };
+                let cfg = LaunchConfig { grid_dim: (grid, 1, 1), block_dim: (128, 1, 1), shared_mem_bytes: 0 };
+                let fs = module.load_function(single).unwrap();
+                // Reference: single-token kernel, token by token.
+                let mut expected = Vec::new();
+                for t in 0..8usize {
+                    let xt = stream.clone_htod(&x[t * columns as usize..(t + 1) * columns as usize]).unwrap();
+                    let mut y = stream.alloc_zeros::<f32>(rows as usize).unwrap();
+                    let mut l = stream.launch_builder(&fs);
+                    l.arg(&weights[0]).arg(&xt).arg(&mut y).arg(&columns).arg(&rows);
+                    // SAFETY: validated matrix, x has columns floats, y rows floats.
+                    unsafe { l.launch(cfg) }.unwrap();
+                    expected.extend(stream.clone_dtoh(&y).unwrap());
+                }
+                let mut y = stream.alloc_zeros::<f32>(rows as usize * 8).unwrap();
+                let mut report = String::new();
+                for n in 1u32..=8 {
+                    let fb = module.load_function(&format!("{batch}{n}")).unwrap();
+                    let mut samples = Vec::new();
+                    for rep in 0..4 {
+                        let e0 = stream.record_event(Some(sys::CUevent_flags::CU_EVENT_DEFAULT)).unwrap();
+                        for w in &weights {
+                            let mut l = stream.launch_builder(&fb);
+                            l.arg(w).arg(&xs).arg(&mut y).arg(&columns).arg(&rows);
+                            // SAFETY: x holds 8 tokens, y 8*rows floats, n <= 8.
+                            unsafe { l.launch(cfg) }.unwrap();
+                        }
+                        let e1 = stream.record_event(Some(sys::CUevent_flags::CU_EVENT_DEFAULT)).unwrap();
+                        if rep > 0 {
+                            samples.push(e0.elapsed_ms(&e1).unwrap() / copies as f32);
+                        }
+                    }
+                    samples.sort_by(f32::total_cmp);
+                    let got = stream.clone_dtoh(&y).unwrap();
+                    for i in 0..(n * rows) as usize {
+                        assert_eq!(got[i].to_bits(), expected[i].to_bits(), "{columns}x{rows} kpar={kpar} n={n} i={i}");
+                    }
+                    report += &format!(" n{n}={:.1}us", samples[1] * 1000.0);
+                }
+                println!("BATCH {columns}x{rows} kpar={kpar}:{report}");
+            }
+        }
+    }
 }

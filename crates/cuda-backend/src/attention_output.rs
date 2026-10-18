@@ -217,6 +217,10 @@ impl OutputKernel {
         .map_err(|e| failure("Norme/résiduel fusionnés", e))?;
         Ok(())
     }
+    /// (weights, post-norm scales, post-norm epsilon, columns, rows) for batched passes.
+    pub(crate) fn batch_parts(&self) -> (&CudaSlice<u8>, &CudaSlice<f32>, f32, u32, u32) {
+        (&self.weights, &self.scales, self.epsilon, self.columns, self.rows)
+    }
     pub(crate) fn output(&self) -> &CudaSlice<f32> {
         &self.output
     }

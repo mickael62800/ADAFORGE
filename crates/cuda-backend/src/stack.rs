@@ -277,6 +277,25 @@ impl ResidentLayer {
             })
         }
         .map_err(|e| failure("Projection QKV fusionnée", e))?;
+        self.attend(position, state)?;
+        if super::ffn::fused_rms() && self.width <= 4096 {
+            let (scales, eps, normalized) = self.ffn.pre_norm_parts();
+            self.output_branch
+                .run_fused(self.attention.output(), input, scales, eps, normalized)?;
+            self.ffn.run_prenormed(self.output_branch.output())?;
+        } else {
+            self.output_branch.run(self.attention.output(), input)?;
+            self.ffn.run(self.output_branch.output())?;
+        }
+        Ok(())
+    }
+    /// Q/K/V preparation, KV cache write and attention for one token, reading
+    /// self.raw and leaving the result in self.attention.output().
+    fn attend(
+        &mut self,
+        position: u32,
+        state: Option<&CudaSlice<u32>>,
+    ) -> Result<(), DiagnosticError> {
         if self.grouped_qkv_prep {
             let qheads = self.rows[0] / self.head_width;
             let kvheads = self.rows[1] / self.head_width;
@@ -427,15 +446,82 @@ impl ResidentLayer {
             self.attention
                 .run(&self.rotated[0], &self.cache, position)?;
         }
-        if super::ffn::fused_rms() && self.width <= 4096 {
-            let (scales, eps, normalized) = self.ffn.pre_norm_parts();
-            self.output_branch
-                .run_fused(self.attention.output(), input, scales, eps, normalized)?;
-            self.ffn.run_prenormed(self.output_branch.output())?;
-        } else {
-            self.output_branch.run(self.attention.output(), input)?;
-            self.ffn.run(self.output_branch.output())?;
+        Ok(())
+    }
+    /// Runs `n` consecutive tokens (positions next_position..) through this
+    /// layer. Projections, norms and FFN read their weights once for the whole
+    /// batch; Q/K/V prep, cache and attention stay per token. Bit-identical to
+    /// `n` calls of `run`. Input is buf.input, result is written to buf.output.
+    fn run_batch(
+        &mut self,
+        k: &super::batch::BatchKernels,
+        buf: &mut super::batch::BatchBuffers,
+        n: u32,
+    ) -> Result<(), DiagnosticError> {
+        let start = self.next_position;
+        if self.poisoned || start + n > self.context || start + n > self.capacity {
+            return Err(DiagnosticError("Lot hors capacité du bloc".into()));
         }
+        let Some(intermediate) = self.ffn.batch_parts().map(|f| f.intermediate) else {
+            return Err(DiagnosticError("FFN non compatible avec les lots".into()));
+        };
+        let width = self.width;
+        self.poisoned = true;
+        k.rms(&buf.input, &self.scales[0], &mut buf.normalized, width, self.eps[0], n)?;
+        k.permute(&buf.normalized, &mut buf.permuted, n * width)?;
+        let projections = if self.shared_kv != 0 { 2 } else { 3 };
+        for i in 0..projections {
+            k.matvec(&self.matrices[i], &buf.permuted, &mut buf.raw[i], width, self.rows[i], n, false)?;
+        }
+        let qwidth = self.rows[0];
+        for t in 0..n {
+            for i in 0..projections {
+                let rows = self.rows[i] as usize;
+                let src = buf.raw[i].slice(t as usize * rows..(t as usize + 1) * rows);
+                self.stream
+                    .memcpy_dtod(&src, &mut self.raw[i])
+                    .map_err(|e| failure("Copie QKV lot", e))?;
+            }
+            self.attend(start + t, None)?;
+            let q = qwidth as usize;
+            let mut dst = buf.attention.slice_mut(t as usize * q..(t as usize + 1) * q);
+            self.stream
+                .memcpy_dtod(self.attention.output(), &mut dst)
+                .map_err(|e| failure("Copie attention lot", e))?;
+        }
+        let (out_w, post_scales, post_eps, columns, rows) = self.output_branch.batch_parts();
+        k.permute(&buf.attention, &mut buf.permuted, n * columns)?;
+        k.matvec(out_w, &buf.permuted, &mut buf.projected, columns, rows, n, self.output_branch.kparallel_enabled())?;
+        let ffn = self.ffn.batch_parts().expect("checked above");
+        k.rms_add_rms(
+            &buf.projected,
+            &buf.input,
+            post_scales,
+            ffn.pre_scale,
+            &mut buf.hidden,
+            &mut buf.normalized,
+            width,
+            post_eps,
+            ffn.pre_eps,
+            n,
+        )?;
+        k.permute(&buf.normalized, &mut buf.permuted, n * width)?;
+        k.tiled_gate(ffn.codes, ffn.tile_scales, &buf.permuted, &mut buf.gate, &mut buf.up, width, intermediate, n)?;
+        k.gelu(&buf.gate, &buf.up, &mut buf.active, n * intermediate)?;
+        k.permute(&buf.active, &mut buf.permuted, n * intermediate)?;
+        k.matvec(ffn.down, &buf.permuted, &mut buf.down, intermediate, width, n, true)?;
+        k.rms_residual_scale(
+            &buf.down,
+            &buf.hidden,
+            ffn.post_scale,
+            &mut buf.output,
+            width,
+            ffn.post_eps,
+            ffn.layer_scale,
+            n,
+        )?;
+        self.next_position = start + n;
+        self.poisoned = false;
         Ok(())
     }
     fn output(&self) -> &CudaSlice<f32> {
@@ -693,7 +779,9 @@ pub(crate) fn open_session(
         capacity,
         vocabulary,
         poisoned: false,
+        batch: None,
     };
+    session.setup_batch()?;
     if std::env::var_os("ADAFORGE_DISABLE_GRAPHS").is_none() {
         session.capture_graph()?;
     }
@@ -768,8 +856,114 @@ struct CudaGenerationSession {
     capacity: u32,
     vocabulary: u32,
     poisoned: bool,
+    batch: Option<(super::batch::BatchKernels, super::batch::BatchBuffers)>,
 }
 impl CudaGenerationSession {
+    fn setup_batch(&mut self) -> Result<(), DiagnosticError> {
+        if std::env::var("ADAFORGE_BATCH_PREFILL").as_deref() == Ok("0")
+            || self.layers.iter().any(|l| l.ffn.batch_parts().is_none() || l.width > 4096)
+        {
+            return Ok(());
+        }
+        let stream = self.layers[0].stream.clone();
+        let mut rows = [0u32; 3];
+        let mut intermediate = 0;
+        for l in &self.layers {
+            for (r, &v) in rows.iter_mut().zip(&l.rows) {
+                *r = (*r).max(v);
+            }
+            intermediate = intermediate.max(l.ffn.batch_parts().map_or(0, |f| f.intermediate));
+        }
+        let buffers = super::batch::BatchBuffers::new(&stream, self.layers[0].width, rows, rows[0], intermediate)?;
+        self.batch = Some((super::batch::BatchKernels::new(stream)?, buffers));
+        Ok(())
+    }
+    /// Diagnostic: batched prefill vs token-by-token prefill, compared bit for
+    /// bit on the final hidden state and every layer's K/V cache. Leaves the
+    /// session reset (empty cache).
+    fn verify_batch_prefill(&mut self, ids: &[u32]) -> Result<(), DiagnosticError> {
+        let snapshot = |session: &Self| -> Result<Vec<Vec<f32>>, DiagnosticError> {
+            let stream = &session.layers[0].stream;
+            let mut all = vec![stream
+                .clone_dtoh(session.layers.last().expect("48 layers").output())
+                .map_err(|e| failure("Lecture vérif", e))?];
+            for layer in &session.layers {
+                let (k, v) = layer.cache.snapshot()?;
+                all.push(k);
+                all.push(v);
+            }
+            Ok(all)
+        };
+        for chunk in ids.chunks(super::batch::MAX_BATCH) {
+            if chunk.len() == 1 {
+                self.consume(chunk[0])?;
+            } else {
+                self.consume_batch(chunk)?;
+            }
+        }
+        let batched = snapshot(self)?;
+        self.poisoned = false;
+        adaforge_application::GenerationSession::reset(self)?;
+        for &id in ids {
+            self.consume(id)?;
+        }
+        let sequential = snapshot(self)?;
+        adaforge_application::GenerationSession::reset(self)?;
+        let mut mismatches = 0usize;
+        let mut total = 0usize;
+        for (a, b) in batched.iter().zip(&sequential) {
+            total += a.len();
+            mismatches += a.iter().zip(b).filter(|(x, y)| x.to_bits() != y.to_bits()).count();
+        }
+        eprintln!(
+            "BATCH_VERIFY {{\"tokens\":{},\"values\":{},\"mismatches\":{}}}",
+            ids.len(),
+            total,
+            mismatches
+        );
+        self.poisoned = true;
+        if mismatches != 0 {
+            return Err(DiagnosticError("Prefill par lots différent du séquentiel".into()));
+        }
+        Ok(())
+    }
+    /// Feeds up to MAX_BATCH tokens with one weight pass per layer.
+    /// Bit-identical to calling `consume` for each id.
+    fn consume_batch(&mut self, ids: &[u32]) -> Result<(), DiagnosticError> {
+        let n = ids.len();
+        let position = self.cached.len();
+        if n == 0
+            || n > super::batch::MAX_BATCH
+            || position + n > self.capacity as usize
+            || ids.iter().any(|&id| id >= self.vocabulary)
+        {
+            return Err(DiagnosticError("Lot de tokens invalide".into()));
+        }
+        let Some((kernels, buf)) = self.batch.as_mut() else {
+            return Err(DiagnosticError("Lots indisponibles".into()));
+        };
+        let width = self.layers[0].width as usize;
+        for (t, &id) in ids.iter().enumerate() {
+            self.head.embed(id, &mut self.input)?;
+            let mut dst = buf.input.slice_mut(t * width..(t + 1) * width);
+            self.layers[0]
+                .stream
+                .memcpy_dtod(&self.input, &mut dst)
+                .map_err(|e| failure("Copie embedding lot", e))?;
+        }
+        for layer in &mut self.layers {
+            layer.run_batch(kernels, buf, n as u32)?;
+            std::mem::swap(&mut buf.input, &mut buf.output);
+        }
+        let last = buf.input.slice((n - 1) * width..n * width);
+        let layer = self.layers.last_mut().expect("48 layers");
+        layer
+            .stream
+            .memcpy_dtod(&last, layer.ffn.output_mut())
+            .map_err(|e| failure("Copie sortie lot", e))?;
+        self.cached.extend_from_slice(ids);
+        Ok(())
+    }
     fn capture_graph(&mut self) -> Result<(), DiagnosticError> {
         let stream = self.layers[0].stream.clone();
         stream
@@ -854,8 +1048,25 @@ impl CudaGenerationSession {
         let started = std::time::Instant::now();
         let cached_tokens = self.cached.len();
         self.poisoned = true;
-        for &id in &prompt[self.cached.len()..] {
-            self.consume(id)?;
+        let pending = prompt[self.cached.len()..].to_vec();
+        if self.batch.is_some()
+            && cached_tokens == 0
+            && std::env::var("ADAFORGE_BATCH_VERIFY").as_deref() == Ok("1")
+        {
+            self.verify_batch_prefill(&pending)?;
+        }
+        if self.batch.is_some() {
+            for chunk in pending.chunks(super::batch::MAX_BATCH) {
+                if chunk.len() == 1 {
+                    self.consume(chunk[0])?;
+                } else {
+                    self.consume_batch(chunk)?;
+                }
+            }
+        } else {
+            for &id in &pending {
+                self.consume(id)?;
+            }
         }
         self.layers[0]
             .stream
@@ -1402,6 +1613,7 @@ mod tests {
             capacity: 8,
             vocabulary: 5,
             poisoned: false,
+            batch: None,
         };
         let mut emitted = Vec::new();
         let first = session
@@ -1507,6 +1719,7 @@ mod tests {
             capacity: 4,
             vocabulary: 5,
             poisoned: false,
+            batch: None,
         };
         let mut direct = make();
         let mut graph = make();

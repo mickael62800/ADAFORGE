@@ -81,6 +81,9 @@ __device__ __forceinline__ float rms_inverse_cached(const float (&v)[16],unsigne
 // h = residual + rms(projected)*s1 ; normalized = rms(h)*s2
 extern "C" __global__ void rms_add_rms(const float* projected,const float* residual,const float* s1,const float* s2,
     float* h_out,float* normalized,unsigned int width,float eps1,float eps2){
+    // One block per vector (batched prefill); grid 1 is the single-token case.
+    const unsigned long long base=(unsigned long long)blockIdx.x*width;
+    projected+=base;residual+=base;h_out+=base;normalized+=base;
     const unsigned int thread=threadIdx.x,lane=(thread&7)*32+(thread>>3);
     // All loads issued up front: scales are usually cold (DRAM) by now.
     float v[16],r[16],a[16],b[16];
@@ -98,6 +101,8 @@ extern "C" __global__ void rms_add_rms(const float* projected,const float* resid
 // output = (rms(down)*s + residual) * scale
 extern "C" __global__ void rms_residual_scale(const float* down,const float* residual,const float* s,
     float* output,unsigned int width,float eps,float scale){
+    const unsigned long long base=(unsigned long long)blockIdx.x*width;
+    down+=base;residual+=base;output+=base;
     const unsigned int thread=threadIdx.x,lane=(thread&7)*32+(thread>>3);
     float v[16],r[16],a[16];
     #pragma unroll
