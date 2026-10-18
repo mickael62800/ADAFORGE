@@ -97,9 +97,9 @@ template<bool ParallelExp> __device__ __forceinline__ void attention_impl(const 
         unsigned int t=start;
         // Loads of eight tokens in flight; accumulation order unchanged.
         for(;t+8<=end;t+=8){
-            float vv[8];
+            float vv[64];
             #pragma unroll
-            for(unsigned int u=0;u<8;++u)vv[u]=vp[(t+u)*stride];
+            for(unsigned int u=0;u<64;++u)vv[u]=vp[(t+u)*stride];
             #pragma unroll
             for(unsigned int u=0;u<8;++u)sum+=scores[t+u-start]*vv[u];
         }
@@ -177,36 +177,110 @@ extern "C" __global__ void attention_split_softmax(float* scores,unsigned int to
     __syncthreads();
     for(unsigned int i=thread;i<n;i+=256)s[i]=expf(s[i]-maximum);
     __syncthreads();
-    if(thread==0){
-        // Sequential in index order; 16-byte loads keep only the add chain.
-        float sum=0.0f;unsigned int i=0;
-        for(;i+4<=n;i+=4){const float4 v=*(const float4*)(s+i);sum+=v.x;sum+=v.y;sum+=v.z;sum+=v.w;}
-        for(;i<n;++i)sum+=s[i];
-        total=sum;
+    // Sequential sum in index order. Tiles of 2048 scores are staged in shared
+    // memory by all threads; thread 0 then adds them with eight 16-byte loads
+    // issued ahead, so only the add chain remains.
+    __shared__ __align__(16) float tile[2048];
+    float sum=0.0f;
+    for(unsigned int base=0;base<n;base+=2048){
+        const unsigned int count=min(2048u,n-base);
+        for(unsigned int i=thread;i<count;i+=256)tile[i]=s[base+i];
+        __syncthreads();
+        if(thread==0){
+            unsigned int i=0;
+            for(;i+32<=count;i+=32){
+                float4 v[8];
+                #pragma unroll
+                for(int u=0;u<8;++u)v[u]=*(const float4*)(tile+i+4*u);
+                #pragma unroll
+                for(int u=0;u<8;++u){sum+=v[u].x;sum+=v[u].y;sum+=v[u].z;sum+=v[u].w;}
+            }
+            for(;i<count;++i)sum+=tile[i];
+        }
+        __syncthreads();
     }
+    if(thread==0)total=sum;
     __syncthreads();
     for(unsigned int i=thread;i<n;i+=256)s[i]/=total;
 }
-extern "C" __global__ void attention_split_values(const float* scores,const float* values,float* output,
+// HPT heads (sharing one KV head) per thread: V is loaded once for all of
+// them; each (head, channel) sum still runs over tokens in order.
+template<int HPT> __device__ void split_values_impl(const float* scores,const float* values,float* output,
     unsigned int width,unsigned int q_heads,unsigned int kv_heads,unsigned int tokens,unsigned int position,
     unsigned int window,unsigned int stride_scores,const unsigned int* state){
     if(state){tokens=state[1]+1;position=state[1];}
     unsigned int start,end;split_range(tokens,position,window,start,end);
-    const unsigned int head=blockIdx.x,c=blockIdx.y*64+threadIdx.x;
+    const unsigned int head0=blockIdx.x*HPT,c=blockIdx.y*64+threadIdx.x;
     if(c>=width)return;
-    const unsigned int kv=head/(q_heads/kv_heads),n=end-start;
+    const unsigned int kv=head0/(q_heads/kv_heads),n=end-start;
     const unsigned long long stride=(unsigned long long)kv_heads*width;
-    const float* p=scores+(unsigned long long)head*stride_scores;
+    const float* p=scores+(unsigned long long)head0*stride_scores;
     const float* vp=values+(unsigned long long)kv*width+c+(unsigned long long)start*stride;
-    float sum=0.0f;unsigned int i=0;
-    // Sixteen tokens in flight; accumulation order unchanged.
-    for(;i+16<=n;i+=16){
-        float vv[16];
+    float sum[HPT];
+    #pragma unroll
+    for(int h=0;h<HPT;++h)sum[h]=0.0f;
+    unsigned int i=0;
+    for(;i+64<=n;i+=64){
+        float vv[64];
         #pragma unroll
-        for(unsigned int u=0;u<16;++u)vv[u]=vp[(unsigned long long)(i+u)*stride];
+        for(unsigned int u=0;u<64;++u)vv[u]=vp[(unsigned long long)(i+u)*stride];
         #pragma unroll
-        for(unsigned int u=0;u<16;++u)sum+=p[i+u]*vv[u];
+        for(unsigned int u=0;u<64;++u){
+            #pragma unroll
+            for(int h=0;h<HPT;++h)sum[h]+=p[(unsigned long long)h*stride_scores+i+u]*vv[u];
+        }
     }
-    for(;i<n;++i)sum+=p[i]*vp[(unsigned long long)i*stride];
-    output[(unsigned long long)head*width+c]=sum;
+    for(;i<n;++i){
+        const float v=vp[(unsigned long long)i*stride];
+        #pragma unroll
+        for(int h=0;h<HPT;++h)sum[h]+=p[(unsigned long long)h*stride_scores+i]*v;
+    }
+    #pragma unroll
+    for(int h=0;h<HPT;++h)output[(unsigned long long)(head0+h)*width+c]=sum[h];
 }
+#define SPLIT_VALUES_ARGS const float* scores,const float* values,float* output,unsigned int width,unsigned int q_heads,unsigned int kv_heads,unsigned int tokens,unsigned int position,unsigned int window,unsigned int stride_scores,const unsigned int* state
+#define SPLIT_VALUES_PASS scores,values,output,width,q_heads,kv_heads,tokens,position,window,stride_scores,state
+extern "C" __global__ void attention_split_values(SPLIT_VALUES_ARGS){split_values_impl<1>(SPLIT_VALUES_PASS);}
+extern "C" __global__ void attention_split_values_h2(SPLIT_VALUES_ARGS){split_values_impl<2>(SPLIT_VALUES_PASS);}
+extern "C" __global__ void attention_split_values_h4(SPLIT_VALUES_ARGS){split_values_impl<4>(SPLIT_VALUES_PASS);}
+
+// Scores for HPT heads sharing one KV head: each key row is loaded once for
+// all of them. Per head, the dot product uses the same 8-group tree as above.
+template<int HPT> __device__ void split_scores_shared(const float* q,const float* keys,float* scores,
+    unsigned int width,unsigned int q_heads,unsigned int kv_heads,unsigned int tokens,unsigned int position,
+    unsigned int window,float scale,unsigned int stride_scores,const unsigned int* state){
+    if(state){tokens=state[1]+1;position=state[1];}
+    const unsigned int head0=blockIdx.x*HPT,kv=head0/(q_heads/kv_heads);
+    unsigned int start,end;split_range(tokens,position,window,start,end);
+    const unsigned int n=end-start,warp=threadIdx.x/32,lane=threadIdx.x&31;
+    const unsigned int first=blockIdx.y*8+warp,step=gridDim.y*8;
+    if(first>=n)return;
+    const unsigned long long stride=(unsigned long long)kv_heads*width;
+    float qr[HPT][16];
+    #pragma unroll
+    for(int h=0;h<HPT;++h){
+        #pragma unroll
+        for(unsigned int k=0;k<16;++k){const unsigned int c=lane+k*32;qr[h][k]=c<width?q[(unsigned long long)(head0+h)*width+c]:0.0f;}
+    }
+    const float* kb=keys+(unsigned long long)kv*width;
+    for(unsigned int i=first;i<n;i+=step){
+        const unsigned long long t=start+i;
+        float ka[16];
+        #pragma unroll
+        for(unsigned int k=0;k<16;++k){const unsigned int c=lane+k*32;ka[k]=c<width?kb[t*stride+c]:0.0f;}
+        #pragma unroll
+        for(int h=0;h<HPT;++h){
+            float pa[8]={0.0f};
+            #pragma unroll
+            for(unsigned int k=0;k<16;++k)if(lane+k*32<width)pa[k%8]+=qr[h][k]*ka[k];
+            float sa=((pa[0]+pa[4])+(pa[2]+pa[6]))+((pa[1]+pa[5])+(pa[3]+pa[7]));
+            for(unsigned int offset=16;offset>0;offset>>=1)sa+=__shfl_down_sync(0xffffffff,sa,offset);
+            if(lane==0)scores[(unsigned long long)(head0+h)*stride_scores+i]=sa*scale;
+        }
+    }
+}
+#define SPLIT_SCORES_ARGS const float* q,const float* keys,float* scores,unsigned int width,unsigned int q_heads,unsigned int kv_heads,unsigned int tokens,unsigned int position,unsigned int window,float scale,unsigned int stride_scores,const unsigned int* state
+#define SPLIT_SCORES_PASS q,keys,scores,width,q_heads,kv_heads,tokens,position,window,scale,stride_scores,state
+extern "C" __global__ void attention_split_scores_h2(SPLIT_SCORES_ARGS){split_scores_shared<2>(SPLIT_SCORES_PASS);}
+extern "C" __global__ void attention_split_scores_h4(SPLIT_SCORES_ARGS){split_scores_shared<4>(SPLIT_SCORES_PASS);}
+extern "C" __global__ void attention_split_scores_h8(SPLIT_SCORES_ARGS){split_scores_shared<8>(SPLIT_SCORES_PASS);}

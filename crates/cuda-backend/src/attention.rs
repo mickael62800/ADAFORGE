@@ -18,6 +18,8 @@ pub(crate) struct AttentionKernel {
 }
 /// Three-kernel attention for long contexts (see attention.cu), bit-identical.
 struct SplitAttention {
+    /// Heads sharing each key load (1, 2 or 4).
+    heads_per_warp: u32,
     scores_fn: CudaFunction,
     softmax_fn: CudaFunction,
     values_fn: CudaFunction,
@@ -68,8 +70,14 @@ impl AttentionKernel {
                     .load_function(name)
                     .map_err(|e| failure("Attention scindée", e))
             };
+            let heads_per_warp = (config.q_heads() / config.kv_heads()).min(4);
             Some(SplitAttention {
-                scores_fn: load("attention_split_scores")?,
+                heads_per_warp,
+                scores_fn: load(match heads_per_warp {
+                    4 => "attention_split_scores_h4",
+                    2 => "attention_split_scores_h2",
+                    _ => "attention_split_scores",
+                })?,
                 softmax_fn: load("attention_split_softmax")?,
                 values_fn: load("attention_split_values")?,
                 scores: stream
@@ -182,7 +190,7 @@ impl AttentionKernel {
         };
         // SAFETY: validated geometry (width <= 512), visible tokens <= MAX_CONTEXT
         // scores per head; blocks past the visible range return immediately.
-        unsafe { l.launch(cfg(qheads, score_blocks, 256)) }
+        unsafe { l.launch(cfg(qheads / split.heads_per_warp, score_blocks, 256)) }
             .map_err(|e| failure("Scores attention", e))?;
         let mut l = self.stream.launch_builder(&split.softmax_fn);
         l.arg(&mut split.scores).arg(&tokens).arg(&position).arg(&window).arg(&stride);
@@ -453,8 +461,10 @@ mod reference_bits {
             state ^= state << 5;
             ((state % 65536) as f32 / 32768.0 - 1.0) * amp
         };
-        let (qheads, kvheads) = (16u32, 8u32);
-        for width in [256u32, 512, 640] {
+        let sc2 = m.load_function("attention_split_scores_h2").unwrap();
+        let sc4 = m.load_function("attention_split_scores_h4").unwrap();
+        let qheads = 16u32;
+        for (kvheads, width) in [(8u32, 256u32), (8, 512), (8, 640), (1, 512), (1, 256)] {
             for tokens in [1u32, 7, 8, 9, 16, 17, 44, 63, 64, 130, 1100, 3001] {
                 for window in [0u32, 16] {
                     let rnd = |n: u32, amp: f32, next: &mut dyn FnMut(f32) -> f32| (0..n).map(|_| next(amp)).collect::<Vec<_>>();
@@ -486,11 +496,13 @@ mod reference_bits {
                         let mut out = stream.alloc_zeros::<f32>((qheads * width) as usize).unwrap();
                         let null = 0u64;
                         let cfg = |x: u32, y: u32, t: u32| LaunchConfig { grid_dim: (x, y, 1), block_dim: (t, 1, 1), shared_mem_bytes: 0 };
-                        let mut l = stream.launch_builder(&sc);
+                        let hs = (qheads / kvheads).min(4);
+                        let scf = match hs { 4 => &sc4, 2 => &sc2, _ => &sc };
+                        let mut l = stream.launch_builder(scf);
                         l.arg(&q).arg(&k).arg(&mut scores).arg(&width).arg(&qheads).arg(&kvheads)
                             .arg(&tokens).arg(&position).arg(&window).arg(&scale).arg(&stride).arg(&null);
                         // SAFETY: scores hold qheads*stride floats; visible tokens <= stride.
-                        unsafe { l.launch(cfg(qheads, 7, 256)) }.unwrap();
+                        unsafe { l.launch(cfg(qheads / hs, 7, 256)) }.unwrap();
                         let mut l = stream.launch_builder(&sm);
                         l.arg(&mut scores).arg(&tokens).arg(&position).arg(&window).arg(&stride).arg(&null);
                         // SAFETY: one block per head row.
@@ -508,6 +520,81 @@ mod reference_bits {
                     }
                 }
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod split_timing {
+    use cudarc::driver::{CudaContext, LaunchConfig, PushKernelArg, sys};
+    #[test]
+    #[ignore = "Requires RTX 4090 and CUDA"]
+    fn split_attention_kernel_times() {
+        let ctx = CudaContext::new(0).unwrap();
+        let stream = ctx.default_stream();
+        let ptx = cudarc::nvrtc::compile_ptx_with_opts(
+            include_str!("../../../kernels/ada/attention.cu"),
+            cudarc::nvrtc::CompileOptions { arch: Some("compute_89"), ..Default::default() },
+        )
+        .unwrap();
+        let m = ctx.load_module(ptx).unwrap();
+        let names = ["attention_split_scores", "attention_split_softmax", "attention_split_values", "attention_split_values_h2", "attention_split_values_h4", "attention_split_scores_h2", "attention_split_scores_h4", "attention_split_scores_h8"];
+        let f: Vec<_> = names.iter().map(|n| m.load_function(n).unwrap()).collect();
+        for (tokens, kvheads, width, window) in [(7620u32, 8u32, 256u32, 1024u32), (7620, 1, 512, 0)] {
+            let qheads = 16u32;
+            let stride = 10240u32;
+            let q = stream.clone_htod(&vec![0.01f32; (qheads * width) as usize]).unwrap();
+            let kv: Vec<f32> = (0..tokens * kvheads * width).map(|i| (i % 97) as f32 * 0.001).collect();
+            let k = stream.clone_htod(&kv).unwrap();
+            let v = stream.clone_htod(&kv).unwrap();
+            let mut scores = stream.alloc_zeros::<f32>((qheads * stride) as usize).unwrap();
+            let mut out = stream.alloc_zeros::<f32>((qheads * width) as usize).unwrap();
+            let (position, scale, null) = (tokens - 1, 0.0625f32, 0u64);
+            let cfg = |x: u32, y: u32, t: u32| LaunchConfig { grid_dim: (x, y, 1), block_dim: (t, 1, 1), shared_mem_bytes: 0 };
+            for (fi, hs) in [(5usize, 2u32), (6, 4), (7, 8)] {
+                if hs > qheads / kvheads { continue; }
+                let mut best = f32::MAX;
+                for _ in 0..10 {
+                    let e0 = stream.record_event(Some(sys::CUevent_flags::CU_EVENT_DEFAULT)).unwrap();
+                    let mut l = stream.launch_builder(&f[fi]);
+                    l.arg(&q).arg(&k).arg(&mut scores).arg(&width).arg(&qheads).arg(&kvheads)
+                        .arg(&tokens).arg(&position).arg(&window).arg(&scale).arg(&stride).arg(&null);
+                    // SAFETY: buffers sized above.
+                    unsafe { l.launch(cfg(qheads / hs, 32, 256)) }.unwrap();
+                    let e1 = stream.record_event(Some(sys::CUevent_flags::CU_EVENT_DEFAULT)).unwrap();
+                    best = best.min(e0.elapsed_ms(&e1).unwrap());
+                }
+                println!("SCORES h{hs} kv{kvheads}: {:.1}us", best * 1e3);
+            }
+            let mut times = [f32::MAX; 3];
+            for _ in 0..20 {
+                let e = |s: &std::sync::Arc<cudarc::driver::CudaStream>| s.record_event(Some(sys::CUevent_flags::CU_EVENT_DEFAULT)).unwrap();
+                let e0 = e(&stream);
+                let mut l = stream.launch_builder(&f[0]);
+                l.arg(&q).arg(&k).arg(&mut scores).arg(&width).arg(&qheads).arg(&kvheads)
+                    .arg(&tokens).arg(&position).arg(&window).arg(&scale).arg(&stride).arg(&null);
+                // SAFETY: buffers sized above.
+                unsafe { l.launch(cfg(qheads, 32, 256)) }.unwrap();
+                let e1 = e(&stream);
+                let mut l = stream.launch_builder(&f[1]);
+                l.arg(&mut scores).arg(&tokens).arg(&position).arg(&window).arg(&stride).arg(&null);
+                // SAFETY: one block per head row.
+                unsafe { l.launch(cfg(qheads, 1, 256)) }.unwrap();
+                let e2 = e(&stream);
+                let hpt = 1u32;
+                let vf = &f[match hpt { 1 => 2, 2 => 3, _ => 4 }];
+                let mut l = stream.launch_builder(vf);
+                l.arg(&scores).arg(&v).arg(&mut out).arg(&width).arg(&qheads).arg(&kvheads)
+                    .arg(&tokens).arg(&position).arg(&window).arg(&stride).arg(&null);
+                // SAFETY: one thread per (head group, channel).
+                unsafe { l.launch(cfg(qheads / hpt, width.div_ceil(64), 64)) }.unwrap();
+                let e3 = e(&stream);
+                times[0] = times[0].min(e0.elapsed_ms(&e1).unwrap());
+                times[1] = times[1].min(e1.elapsed_ms(&e2).unwrap());
+                times[2] = times[2].min(e2.elapsed_ms(&e3).unwrap());
+            }
+            println!("SPLIT kv{kvheads} w{width} window{window}: scores {:.1}us softmax {:.1}us values {:.1}us",
+                times[0] * 1e3, times[1] * 1e3, times[2] * 1e3);
         }
     }
 }
