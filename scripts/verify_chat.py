@@ -12,12 +12,14 @@ root=Path(__file__).resolve().parents[1]
 exe=str(root/'target/release/adaforge.exe')
 first='Mon prénom est Luc.'
 second='Quel est mon prénom ?'
-lines=first+'\n'+('bonjour '*600)+'\n'+second+'\n/reset\nBonjour, comment vas-tu ?\n/quit\n'
+# More tokens than the 10240-token context (digits are one token each) but under
+# the 64 KiB text limit: the turn is refused before any compute.
+lines=first+'\n'+('1234567890'*1200)+'\n'+second+'\n/reset\nBonjour, comment vas-tu ?\n/quit\n'
 result=subprocess.run([exe,'chat',str(args.model),'64'],input=lines,capture_output=True,encoding='utf-8',check=True)
 answers=re.findall(r'\nAssistant : (.*?)(?=\nVous >|\Z)',result.stdout,re.S)
 assert len(answers)==3,repr(result.stdout)
 answers=[a.split("\n[Mesures",1)[0].rstrip() for a in answers]
-assert 'Contexte de 512 tokens dépassé' in result.stdout
+assert re.search(r'Contexte de \d+ tokens dépassé',result.stdout),repr(result.stdout[-2000:])
 assert 'Historique effacé' in result.stdout
 assert 'Luc' in answers[1]
 assert answers[2]=="Bonjour ! Je vais très bien, merci de demander. Et vous, comment allez-vous aujourd'hui ? Comment puis-je vous aider ?"
