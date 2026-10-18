@@ -1398,12 +1398,12 @@ impl adaforge_application::GenerationSession for CudaGenerationSession {
         Ok(())
     }
 }
-/// Draft length for speculative decoding (`ADAFORGE_SPEC_DEPTH`, default 6).
+/// Draft length for speculative decoding (`ADAFORGE_SPEC_DEPTH`, default 11, at most 15).
 fn speculation_depth() -> usize {
     std::env::var("ADAFORGE_SPEC_DEPTH")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(6)
+        .unwrap_or(11)
 }
 /// Prompt-lookup draft: tokens that followed the most recent earlier
 /// occurrence of the last 3 tokens (2-token matches cost more than they win).

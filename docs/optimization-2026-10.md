@@ -23,7 +23,7 @@ Les débits varient d'environ ±2 % d'une série à l'autre. Les décisions ont 
 - **Passe par lots** (prefill et vérification spéculative) : matvec Q4 et gate en tuiles lisant les poids une fois pour plusieurs tokens (x réordonné pour une lecture `float4` par token), préparation Q/K/V et écriture du cache groupées, attention des n requêtes en un lancement (`blockIdx.z`). Lots de 32 ; gate et down découpés par 8 pour éviter le débordement de registres ; gate à deux tuiles par bloc.
 - **Graphe CUDA** : le dernier kernel de chaque couche calcule aussi la norme d'entrée de la couche suivante (un lancement de moins par couche).
 - **Tête par lots** : pour 4 et 8 tokens, variante en deux passes (s0 à s7 puis s8 à s15, moitié gauche de l'arbre réduite entre les deux) qui évite le débordement de registres.
-- **Décodage spéculatif greedy** : brouillons par recherche de 3-grammes dans l'historique (6 tokens), vérification par la passe par lots et une tête Q6_K par lots, retour en arrière du cache KV. Les tokens acceptés sont exactement les choix greedy.
+- **Décodage spéculatif greedy** : brouillons par recherche de 3-grammes dans l’historique (jusqu’à 11 tokens, vérifiés jusqu’à 16 positions), vérification par la passe par lots et une tête Q6_K par lots, retour en arrière du cache KV. Les tokens acceptés sont exactement les choix greedy.
 
 ## Essais écartés (mesurés)
 
@@ -40,7 +40,7 @@ Les débits varient d'environ ±2 % d'une série à l'autre. Les décisions ont 
 | Variable | Effet |
 |---|---|
 | `ADAFORGE_SPECULATIVE=0` | désactive le décodage spéculatif |
-| `ADAFORGE_SPEC_DEPTH=n` | longueur des brouillons (défaut 6, maximum 7) |
+| `ADAFORGE_SPEC_DEPTH=n` | longueur des brouillons (défaut 11, maximum 15) |
 | `ADAFORGE_BATCH_PREFILL=0` | prefill token par token |
 | `ADAFORGE_BATCH_VERIFY=1` | compare le prefill par lots au prefill séquentiel (état caché + cache KV, bit à bit) |
 | `ADAFORGE_SPLIT_ATTENTION=0` | ancien kernel d'attention unique |

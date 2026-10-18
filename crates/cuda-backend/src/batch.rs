@@ -8,8 +8,9 @@ use cudarc::nvrtc::{CompileOptions, compile_ptx_with_opts};
 use std::sync::Arc;
 
 pub(crate) const MAX_BATCH: usize = 32;
-/// Longest speculative verification batch (the batched head stops at 8).
-pub(crate) const MAX_VERIFY: usize = 8;
+/// Longest speculative verification batch (the batched head runs it as
+/// launches of at most 8 tokens).
+pub(crate) const MAX_VERIFY: usize = 16;
 /// Above this many tokens, the 4-warp kernels (tiled gate, k-parallel) spill
 /// registers; larger batches run as several launches of at most this size.
 const SPLIT_ABOVE: u32 = 8;

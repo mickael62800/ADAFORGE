@@ -460,18 +460,19 @@ impl ResidentHead {
         n: usize,
     ) -> Result<Vec<u32>, DiagnosticError> {
         let width = self.width as usize;
-        if n == 0 || n > self.batch_project.len() || input.len() < n * width {
+        let per_launch = self.batch_project.len();
+        if n == 0 || n > 2 * per_launch || input.len() < n * width {
             return Err(DiagnosticError("Lot tête invalide".into()));
         }
         if self.batch_normalized.is_none() {
             self.batch_normalized = Some(
                 self.stream
-                    .alloc_zeros(8 * width)
+                    .alloc_zeros(16 * width)
                     .map_err(|e| failure("Buffer norme lot", e))?,
             );
             self.batch_raw = Some(
                 self.stream
-                    .alloc_zeros(8 * self.rows as usize)
+                    .alloc_zeros(16 * self.rows as usize)
                     .map_err(|e| failure("Buffer logits lot", e))?,
             );
         }
@@ -484,7 +485,7 @@ impl ResidentHead {
             .arg(&mut *normalized)
             .arg(&self.width)
             .arg(&self.eps);
-        // SAFETY: n <= 8 vectors of width in input and normalized, one block each.
+        // SAFETY: n <= 16 vectors of width in input and normalized, one block each.
         unsafe {
             launch.launch(LaunchConfig {
                 grid_dim: (n as u32, 1, 1),
@@ -493,24 +494,34 @@ impl ResidentHead {
             })
         }
         .map_err(|e| failure("Norme finale lot", e))?;
-        let mut launch = self.stream.launch_builder(&self.batch_project[n - 1]);
-        launch
-            .arg(&self.weights)
-            .arg(self.dscales.as_ref().expect("packed head"))
-            .arg(&*normalized)
-            .arg(&mut *raw)
-            .arg(&self.width)
-            .arg(&self.rows);
-        // SAFETY: packed table, x holds n*width floats, raw 8*rows floats.
-        unsafe {
-            launch.launch(LaunchConfig {
-                grid_dim: (self.rows.div_ceil(4), 1, 1),
-                block_dim: (128, 1, 1),
-                shared_mem_bytes: 0,
-            })
-        }
-        .map_err(|e| failure("Projection lot", e))?;
+        // Balanced launches of at most 8 tokens (the table is read once each).
         let rows = self.rows as usize;
+        let launches = n.div_ceil(per_launch);
+        let chunk = n.div_ceil(launches);
+        let mut first = 0;
+        while first < n {
+            let m = chunk.min(n - first);
+            let x = normalized.slice(first * width..);
+            let mut y = raw.slice_mut(first * rows..);
+            let mut launch = self.stream.launch_builder(&self.batch_project[m - 1]);
+            launch
+                .arg(&self.weights)
+                .arg(self.dscales.as_ref().expect("packed head"))
+                .arg(&x)
+                .arg(&mut y)
+                .arg(&self.width)
+                .arg(&self.rows);
+            // SAFETY: packed table; the views hold m*width inputs and m*rows logits.
+            unsafe {
+                launch.launch(LaunchConfig {
+                    grid_dim: (self.rows.div_ceil(4), 1, 1),
+                    block_dim: (128, 1, 1),
+                    shared_mem_bytes: 0,
+                })
+            }
+            .map_err(|e| failure("Projection lot", e))?;
+            first += m;
+        }
         let mut ids = Vec::with_capacity(n);
         for t in 0..n {
             let src = raw.slice(t * rows..(t + 1) * rows);
