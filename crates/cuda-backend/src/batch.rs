@@ -10,6 +10,9 @@ use std::sync::Arc;
 pub(crate) const MAX_BATCH: usize = 16;
 /// Longest speculative verification batch (the batched head stops at 8).
 pub(crate) const MAX_VERIFY: usize = 8;
+/// Above this many tokens, the 4-warp kernels (tiled gate, k-parallel) spill
+/// registers; larger batches run as several launches of at most this size.
+const SPLIT_ABOVE: u32 = 8;
 
 pub(crate) struct BatchKernels {
     stream: Arc<CudaStream>,
@@ -117,16 +120,24 @@ impl BatchKernels {
         {
             return Err(DiagnosticError("Matvec lot invalide".into()));
         }
-        let f = if kparallel {
-            &self.kparallel[n as usize - 1]
-        } else {
-            &self.matvec[n as usize - 1]
-        };
-        let mut l = self.stream.launch_builder(f);
-        l.arg(weights).arg(xp).arg(y).arg(&columns).arg(&rows);
         let cfg = grid(if kparallel { rows } else { rows.div_ceil(4) }, 128);
-        // SAFETY: validated Q4_0 size, x holds n*columns, y n*rows floats.
-        unsafe { l.launch(cfg) }.map_err(|e| failure("Matvec lot", e))?;
+        let chunk = if kparallel { SPLIT_ABOVE } else { n };
+        let mut first = 0;
+        while first < n {
+            let m = chunk.min(n - first);
+            let f = if kparallel {
+                &self.kparallel[m as usize - 1]
+            } else {
+                &self.matvec[m as usize - 1]
+            };
+            let xv = xp.slice((first * columns) as usize..);
+            let mut yv = y.slice_mut((first * rows) as usize..);
+            let mut l = self.stream.launch_builder(f);
+            l.arg(weights).arg(&xv).arg(&mut yv).arg(&columns).arg(&rows);
+            // SAFETY: validated Q4_0 size; the views hold m*columns and m*rows floats.
+            unsafe { l.launch(cfg) }.map_err(|e| failure("Matvec lot", e))?;
+            first += m;
+        }
         Ok(())
     }
     #[allow(clippy::too_many_arguments)]
@@ -149,17 +160,25 @@ impl BatchKernels {
         {
             return Err(DiagnosticError("Gate lot invalide".into()));
         }
-        let mut l = self.stream.launch_builder(&self.tiled_gate[n as usize - 1]);
-        l.arg(codes)
-            .arg(scales)
-            .arg(xp)
-            .arg(g)
-            .arg(u)
-            .arg(&columns)
-            .arg(&intermediate);
-        // SAFETY: tile buffers sized for 2*intermediate rows, outputs n*intermediate.
-        unsafe { l.launch(grid((intermediate * 2).div_ceil(4), 128)) }
-            .map_err(|e| failure("Gate lot", e))?;
+        let mut first = 0;
+        while first < n {
+            let m = SPLIT_ABOVE.min(n - first);
+            let xv = xp.slice((first * columns) as usize..);
+            let mut gv = g.slice_mut((first * intermediate) as usize..);
+            let mut uv = u.slice_mut((first * intermediate) as usize..);
+            let mut l = self.stream.launch_builder(&self.tiled_gate[m as usize - 1]);
+            l.arg(codes)
+                .arg(scales)
+                .arg(&xv)
+                .arg(&mut gv)
+                .arg(&mut uv)
+                .arg(&columns)
+                .arg(&intermediate);
+            // SAFETY: tile buffers sized for 2*intermediate rows; views hold m rows of output.
+            unsafe { l.launch(grid((intermediate * 2).div_ceil(4), 128)) }
+                .map_err(|e| failure("Gate lot", e))?;
+            first += m;
+        }
         Ok(())
     }
     pub(crate) fn rms(
