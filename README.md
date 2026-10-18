@@ -595,4 +595,4 @@ Le [plan consolidé](docs/optimization-plan.md) regroupe les pistes AdaForge, Im
 
 ## Optimisations d'octobre 2026
 
-Génération ~95 tok/s sur prompt court (79 avant), ~200 tok/s quand la réponse reprend le prompt (décodage spéculatif greedy), ~83 tok/s à 7 600 tokens de contexte (26 avant). Premier token ~40 ms, prefill de 7 620 tokens en ~16,5 s, contexte du chat porté à 10 240 tokens. Toutes ces optimisations gardent des résultats bit-à-bit identiques. Détails, essais écartés et variables d'environnement : [docs/optimization-2026-10.md](docs/optimization-2026-10.md).
+Génération ~95 tok/s sur prompt court (79 avant ; llama.cpp CUDA 85,5 dans la même comparaison), ~295 tok/s quand la réponse reprend le prompt (décodage spéculatif greedy), ~83 tok/s à 7 600 tokens de contexte (26 avant). Premier token ~40 ms, prefill de 7 620 tokens en ~16,5 s, contexte du chat porté à 10 240 tokens. Toutes ces optimisations gardent des résultats bit-à-bit identiques. Détails, essais écartés et variables d'environnement : [docs/optimization-2026-10.md](docs/optimization-2026-10.md).

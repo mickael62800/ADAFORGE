@@ -6,8 +6,8 @@ Toutes les optimisations ci-dessous gardent des résultats **bit-à-bit identiqu
 
 | Mesure | Avant | Après |
 |---|---|---|
-| Génération, prompt court (« Bonjour, comment vas-tu ? ») | 79 tok/s | ~95 tok/s |
-| Génération, réponse qui recopie le prompt (spéculation) | 86 tok/s | ~200 tok/s |
+| Génération, prompt court (« Bonjour, comment vas-tu ? ») | 79 tok/s | ~95,5 tok/s (llama.cpp CUDA : 85,5) |
+| Génération, réponse qui recopie le prompt (spéculation) | 86 tok/s | ~295 tok/s |
 | Génération, contexte de 7 600 tokens | 26 tok/s | ~83 tok/s |
 | Premier token, prompt de 20 tokens | 210 ms | ~40 ms |
 | Prefill, 7 620 tokens | 95 s | ~16,5 s |
@@ -21,6 +21,8 @@ Les débits varient d'environ ±2 % d'une série à l'autre. Les décisions ont 
 - **Normes** : scales et résiduel lus avant la réduction (ils sont froids en DRAM à chaque token) ; post-norme + résiduel + pré-norme FFN fusionnés, post-norme FFN + résiduel fusionnés. `__fmul_rn` empêche la contraction en FMA qui changerait le dernier bit.
 - **Attention scindée** en trois kernels (scores, softmax, valeurs) : scores répartis sur beaucoup de blocs avec les clés partagées entre têtes, somme du softmax séquentielle via mémoire partagée, valeurs alimentées par un pipeline `cp.async` (tuiles de 128 tokens, réservé aux largeurs multiples de 32).
 - **Passe par lots** (prefill et vérification spéculative) : matvec Q4 et gate en tuiles lisant les poids une fois pour plusieurs tokens (x réordonné pour une lecture `float4` par token), préparation Q/K/V et écriture du cache groupées, attention des n requêtes en un lancement (`blockIdx.z`). Lots de 32 ; gate et down découpés par 8 pour éviter le débordement de registres ; gate à deux tuiles par bloc.
+- **Graphe CUDA** : le dernier kernel de chaque couche calcule aussi la norme d'entrée de la couche suivante (un lancement de moins par couche).
+- **Tête par lots** : pour 4 et 8 tokens, variante en deux passes (s0 à s7 puis s8 à s15, moitié gauche de l'arbre réduite entre les deux) qui évite le débordement de registres.
 - **Décodage spéculatif greedy** : brouillons par recherche de 3-grammes dans l'historique (6 tokens), vérification par la passe par lots et une tête Q6_K par lots, retour en arrière du cache KV. Les tokens acceptés sont exactement les choix greedy.
 
 ## Essais écartés (mesurés)
@@ -29,6 +31,8 @@ Les débits varient d'environ ±2 % d'une série à l'autre. Les décisions ont 
 - Rangement Q4 « thread-major » à lectures de 16 octets, préchargement explicite dans `q4_row` et dans gate : neutre ou plus lent (le compilateur pipeline déjà).
 - Deux lignes par warp pour les matvec Q4 du décodage, gate à deux tuiles en décodage : neutre ou plus lent.
 - Brouillons à partir de 2-grammes : jamais acceptés sur du texte libre.
+- Préchargement des clés dans les scores, grilles plus larges : neutre. À long contexte, scores et valeurs lisent déjà le cache KV FP32 à ~730 Go/s ; seul un cache FP16 (bits différents) irait plus vite.
+- Fusion préparation Q/K/V + écriture du cache : neutre.
 - Gate en mémoire partagée, gate « une ligne par warp », down à deux lignes par bloc, gate à 4 tuiles : exacts mais pas plus rapides.
 
 ## Variables d'environnement
