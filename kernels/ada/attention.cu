@@ -295,8 +295,9 @@ extern "C" __global__ void attention_split_scores_h4(SPLIT_SCORES_ARGS){split_sc
 extern "C" __global__ void attention_split_scores_h8(SPLIT_SCORES_ARGS){split_scores_shared<8>(SPLIT_SCORES_PASS);}
 
 // Values with an asynchronous shared-memory pipeline. One CTA = 32 channels
-// of one head; all 4 warps issue cp.async copies of V tiles (64 tokens x 32
-// channels) and probability tiles four stages ahead, and warp 0 runs the
+// of one head; all 4 warps issue cp.async copies of V tiles (128 tokens x 32
+// channels, two stages: larger tiles amortize the barriers best) and
+// probability tiles ahead, and warp 0 runs the
 // chains: sum += p[t] * v[t][c] in token order, exactly as the other value
 // kernels (same FMA expression): bit-identical.
 __device__ __forceinline__ void cp_async16(void* smem,const void* gmem,unsigned int bytes){
@@ -305,10 +306,9 @@ __device__ __forceinline__ void cp_async16(void* smem,const void* gmem,unsigned 
 }
 __device__ __forceinline__ void cp_async_commit(){asm volatile("cp.async.commit_group;\n");}
 template<int N> __device__ __forceinline__ void cp_async_wait(){asm volatile("cp.async.wait_group %0;\n" :: "n"(N));}
-template<int HPT> __device__ __forceinline__ void split_values_async_impl(const float* scores,const float* values,float* output,
+template<int HPT,int T=128,int S=2> __device__ __forceinline__ void split_values_async_impl(const float* scores,const float* values,float* output,
     unsigned int width,unsigned int q_heads,unsigned int kv_heads,unsigned int tokens,unsigned int position,
     unsigned int window,unsigned int stride_scores,const unsigned int* state){
-    constexpr int T=64,S=4;
     if(state){tokens=state[1]+1;position=state[1];}
     position+=blockIdx.z;
     scores+=(unsigned long long)blockIdx.z*q_heads*stride_scores;
@@ -361,3 +361,4 @@ template<int HPT> __device__ __forceinline__ void split_values_async_impl(const 
 SPLIT_VALUES_ASYNC_INST(attention_split_values_async,1)
 SPLIT_VALUES_ASYNC_INST(attention_split_values_async_h2,2)
 SPLIT_VALUES_ASYNC_INST(attention_split_values_async_h4,4)
+
