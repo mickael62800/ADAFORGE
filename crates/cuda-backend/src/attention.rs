@@ -14,6 +14,14 @@ pub(crate) struct AttentionKernel {
     dynamic: CudaFunction,
     output: CudaSlice<f32>,
     config: AttentionConfig,
+    split: Option<SplitAttention>,
+}
+/// Three-kernel attention for long contexts (see attention.cu), bit-identical.
+struct SplitAttention {
+    scores_fn: CudaFunction,
+    softmax_fn: CudaFunction,
+    values_fn: CudaFunction,
+    scores: CudaSlice<f32>,
 }
 impl AttentionKernel {
     pub(crate) fn new(
@@ -51,7 +59,30 @@ impl AttentionKernel {
         let output = stream
             .alloc_zeros::<f32>(config.q_heads() as usize * config.width() as usize)
             .map_err(|e| failure("Sortie attention", e))?;
+        let split = if !parallel_exp
+            && config.width() <= 512
+            && std::env::var("ADAFORGE_SPLIT_ATTENTION").as_deref() != Ok("0")
+        {
+            let load = |name: &str| {
+                module
+                    .load_function(name)
+                    .map_err(|e| failure("Attention scindée", e))
+            };
+            Some(SplitAttention {
+                scores_fn: load("attention_split_scores")?,
+                softmax_fn: load("attention_split_softmax")?,
+                values_fn: load("attention_split_values")?,
+                scores: stream
+                    .alloc_zeros::<f32>(
+                        config.q_heads() as usize * super::stack::MAX_CONTEXT as usize,
+                    )
+                    .map_err(|e| failure("Scores attention", e))?,
+            })
+        } else {
+            None
+        };
         Ok(Self {
+            split,
             parallel_exp,
             stream,
             function,
@@ -85,6 +116,10 @@ impl AttentionKernel {
             ));
         }
         let range = c.visible_range(tokens, position).map_err(DiagnosticError)?;
+        if self.split.is_some() {
+            let blocks = (range.len() as u32).div_ceil(16).clamp(1, 32);
+            return self.launch_split(query, keys, values, tokens, position, None, blocks);
+        }
         let width = c.width();
         let q_heads = c.q_heads();
         let kv_heads = c.kv_heads();
@@ -114,6 +149,60 @@ impl AttentionKernel {
         unsafe { launch.launch(config) }.map_err(|e| failure("Lancement attention", e))?;
         Ok(())
     }
+    /// Launches the split kernels. `state` (graph) overrides tokens/position.
+    fn launch_split(
+        &mut self,
+        query: &CudaSlice<f32>,
+        keys: &CudaSlice<f32>,
+        values: &CudaSlice<f32>,
+        tokens: u32,
+        position: u32,
+        state: Option<&CudaSlice<u32>>,
+        score_blocks: u32,
+    ) -> Result<(), DiagnosticError> {
+        let c = self.config;
+        let split = self.split.as_mut().expect("split attention");
+        let (width, qheads, kvheads) = (c.width(), c.q_heads(), c.kv_heads());
+        let window = c.window().unwrap_or(0);
+        let scale = c.scale();
+        let stride = super::stack::MAX_CONTEXT;
+        let null = 0u64;
+        let cfg = |x: u32, y: u32, threads: u32| LaunchConfig {
+            grid_dim: (x, y, 1),
+            block_dim: (threads, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let mut l = self.stream.launch_builder(&split.scores_fn);
+        l.arg(query).arg(keys).arg(&mut split.scores).arg(&width).arg(&qheads).arg(&kvheads)
+            .arg(&tokens).arg(&position).arg(&window).arg(&scale).arg(&stride);
+        match state {
+            Some(st) => l.arg(st),
+            None => l.arg(&null),
+        };
+        // SAFETY: validated geometry (width <= 512), visible tokens <= MAX_CONTEXT
+        // scores per head; blocks past the visible range return immediately.
+        unsafe { l.launch(cfg(qheads, score_blocks, 256)) }
+            .map_err(|e| failure("Scores attention", e))?;
+        let mut l = self.stream.launch_builder(&split.softmax_fn);
+        l.arg(&mut split.scores).arg(&tokens).arg(&position).arg(&window).arg(&stride);
+        match state {
+            Some(st) => l.arg(st),
+            None => l.arg(&null),
+        };
+        // SAFETY: one 256-thread block per head over its own score row.
+        unsafe { l.launch(cfg(qheads, 1, 256)) }.map_err(|e| failure("Softmax attention", e))?;
+        let mut l = self.stream.launch_builder(&split.values_fn);
+        l.arg(&split.scores).arg(values).arg(&mut self.output).arg(&width).arg(&qheads)
+            .arg(&kvheads).arg(&tokens).arg(&position).arg(&window).arg(&stride);
+        match state {
+            Some(st) => l.arg(st),
+            None => l.arg(&null),
+        };
+        // SAFETY: one thread per (head, channel < width); output qheads*width.
+        unsafe { l.launch(cfg(qheads, width.div_ceil(64), 64)) }
+            .map_err(|e| failure("Valeurs attention", e))?;
+        Ok(())
+    }
     pub(crate) fn run_graph(
         &mut self,
         query: &CudaSlice<f32>,
@@ -122,6 +211,10 @@ impl AttentionKernel {
         capacity: u32,
     ) -> Result<(), DiagnosticError> {
         let data = cache.resident()?;
+        if self.split.is_some() {
+            let blocks = capacity.div_ceil(16).clamp(1, 32);
+            return self.launch_split(query, data.keys, data.values, 0, 0, Some(state), blocks);
+        }
         let c = self.config;
         let width = c.width();
         let qheads = c.q_heads();
@@ -347,6 +440,11 @@ mod reference_bits {
         .unwrap();
         let m = ctx.load_module(ptx).unwrap();
         let (new, old) = (m.load_function("causal_attention").unwrap(), m.load_function("ref_causal_attention").unwrap());
+        let (sc, sm, sv) = (
+            m.load_function("attention_split_scores").unwrap(),
+            m.load_function("attention_split_softmax").unwrap(),
+            m.load_function("attention_split_values").unwrap(),
+        );
         let mut state = 0x6a09_e667u32;
         let mut next = |amp: f32| {
             state ^= state << 13;
@@ -356,7 +454,7 @@ mod reference_bits {
         };
         let (qheads, kvheads) = (16u32, 8u32);
         for width in [256u32, 512, 640] {
-            for tokens in [1u32, 7, 8, 9, 16, 17, 44, 63, 64, 130] {
+            for tokens in [1u32, 7, 8, 9, 16, 17, 44, 63, 64, 130, 1100, 3001] {
                 for window in [0u32, 16] {
                     let rnd = |n: u32, amp: f32, next: &mut dyn FnMut(f32) -> f32| (0..n).map(|_| next(amp)).collect::<Vec<_>>();
                     let q = stream.clone_htod(&rnd(qheads * width, 4.0, &mut next)).unwrap();
@@ -381,6 +479,32 @@ mod reference_bits {
                         a.iter().zip(&b).all(|(x, y)| x.to_bits() == y.to_bits()),
                         "width {width} tokens {tokens} window {window}"
                     );
+                    if width <= 512 {
+                        let stride = tokens.next_multiple_of(4);
+                        let mut scores = stream.alloc_zeros::<f32>((qheads * stride) as usize).unwrap();
+                        let mut out = stream.alloc_zeros::<f32>((qheads * width) as usize).unwrap();
+                        let null = 0u64;
+                        let cfg = |x: u32, y: u32, t: u32| LaunchConfig { grid_dim: (x, y, 1), block_dim: (t, 1, 1), shared_mem_bytes: 0 };
+                        let mut l = stream.launch_builder(&sc);
+                        l.arg(&q).arg(&k).arg(&mut scores).arg(&width).arg(&qheads).arg(&kvheads)
+                            .arg(&tokens).arg(&position).arg(&window).arg(&scale).arg(&stride).arg(&null);
+                        // SAFETY: scores hold qheads*stride floats; visible tokens <= stride.
+                        unsafe { l.launch(cfg(qheads, 7, 256)) }.unwrap();
+                        let mut l = stream.launch_builder(&sm);
+                        l.arg(&mut scores).arg(&tokens).arg(&position).arg(&window).arg(&stride).arg(&null);
+                        // SAFETY: one block per head row.
+                        unsafe { l.launch(cfg(qheads, 1, 256)) }.unwrap();
+                        let mut l = stream.launch_builder(&sv);
+                        l.arg(&scores).arg(&v).arg(&mut out).arg(&width).arg(&qheads).arg(&kvheads)
+                            .arg(&tokens).arg(&position).arg(&window).arg(&stride).arg(&null);
+                        // SAFETY: one thread per (head, channel).
+                        unsafe { l.launch(cfg(qheads, width.div_ceil(64), 64)) }.unwrap();
+                        let c = stream.clone_dtoh(&out).unwrap();
+                        assert!(
+                            c.iter().zip(&b).all(|(x, y)| x.to_bits() == y.to_bits()),
+                            "split: width {width} tokens {tokens} window {window}"
+                        );
+                    }
                 }
             }
         }
