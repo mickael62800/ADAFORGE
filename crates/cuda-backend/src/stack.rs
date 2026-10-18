@@ -427,8 +427,15 @@ impl ResidentLayer {
             self.attention
                 .run(&self.rotated[0], &self.cache, position)?;
         }
-        self.output_branch.run(self.attention.output(), input)?;
-        self.ffn.run(self.output_branch.output())?;
+        if super::ffn::fused_rms() && self.width <= 4096 {
+            let (scales, eps, normalized) = self.ffn.pre_norm_parts();
+            self.output_branch
+                .run_fused(self.attention.output(), input, scales, eps, normalized)?;
+            self.ffn.run_prenormed(self.output_branch.output())?;
+        } else {
+            self.output_branch.run(self.attention.output(), input)?;
+            self.ffn.run(self.output_branch.output())?;
+        }
         Ok(())
     }
     fn output(&self) -> &CudaSlice<f32> {

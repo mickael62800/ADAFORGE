@@ -32,6 +32,11 @@ pub(crate) struct FfnKernel {
     pre_eps: f32,
     post_eps: f32,
     layer_scale: f32,
+    fused_post: CudaFunction,
+}
+/// Fused norm/residual kernels (bit-identical). `ADAFORGE_FUSED_RMS=0` disables them.
+pub(crate) fn fused_rms() -> bool {
+    std::env::var("ADAFORGE_FUSED_RMS").as_deref() != Ok("0")
 }
 impl FfnKernel {
     pub(crate) fn strategy_name(&self) -> &'static str {
@@ -103,6 +108,7 @@ impl FfnKernel {
         let rms = load("rms_norm")?;
         let gelu = load("gelu_gate")?;
         let residual = load("ffn_residual_scale")?;
+        let fused_post = load("rms_residual_scale")?;
         // Qualified only for Gemma's fixed dense FFN geometry. Explicit 0 keeps
         // the native path available for regression checks; 1 forces the prototype.
         let use_tiled = std::env::var("ADAFORGE_EXPERIMENTAL_TILED_GATE")
@@ -221,22 +227,36 @@ impl FfnKernel {
             intermediate,
             pre_eps: ffn.pre().epsilon(),
             post_eps: ffn.post().epsilon(),
+            fused_post,
             layer_scale: ffn.layer_scale(),
         })
     }
+    /// Pre-norm scales, epsilon and target buffer, for a producer that fuses the norm.
+    pub(crate) fn pre_norm_parts(&mut self) -> (&CudaSlice<f32>, f32, &mut CudaSlice<f32>) {
+        (&self.pre_scale, self.pre_eps, &mut self.normalized)
+    }
     pub(crate) fn run(&mut self, input: &CudaSlice<f32>) -> Result<(), DiagnosticError> {
+        self.run_inner(input, false)
+    }
+    /// `normalized` was already written by the producer (see `pre_norm_parts`).
+    pub(crate) fn run_prenormed(&mut self, input: &CudaSlice<f32>) -> Result<(), DiagnosticError> {
+        self.run_inner(input, true)
+    }
+    fn run_inner(&mut self, input: &CudaSlice<f32>, prenormed: bool) -> Result<(), DiagnosticError> {
         if input.len() != self.width as usize || input.context() != self.stream.context() {
             return Err(DiagnosticError("Entrée FFN incompatible".into()));
         }
-        norm(
-            &self.stream,
-            &self.rms,
-            input,
-            &self.pre_scale,
-            &mut self.normalized,
-            self.width,
-            self.pre_eps,
-        )?;
+        if !prenormed {
+            norm(
+                &self.stream,
+                &self.rms,
+                input,
+                &self.pre_scale,
+                &mut self.normalized,
+                self.width,
+                self.pre_eps,
+            )?;
+        }
         if let Some(q8) = self.q8.as_mut() {
             let native = self
                 .native_gate
@@ -371,6 +391,27 @@ impl FfnKernel {
                 self.intermediate,
                 self.width,
             )?;
+        }
+        if fused_rms() && self.width <= 4096 {
+            let mut launch = self.stream.launch_builder(&self.fused_post);
+            launch
+                .arg(&self.down)
+                .arg(input)
+                .arg(&self.post_scale)
+                .arg(&mut self.output)
+                .arg(&self.width)
+                .arg(&self.post_eps)
+                .arg(&self.layer_scale);
+            // SAFETY: width <= 4096 vectors, one 256-thread block, output distinct.
+            unsafe {
+                launch.launch(LaunchConfig {
+                    grid_dim: (1, 1, 1),
+                    block_dim: (256, 1, 1),
+                    shared_mem_bytes: 0,
+                })
+            }
+            .map_err(|e| failure("Post-norme FFN fusionnée", e))?;
+            return Ok(());
         }
         norm(
             &self.stream,

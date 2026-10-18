@@ -18,6 +18,7 @@ pub(crate) struct OutputKernel {
     projected: CudaSlice<f32>,
     normalized: CudaSlice<f32>,
     output: CudaSlice<f32>,
+    fused: CudaFunction,
     columns: u32,
     rows: u32,
     epsilon: f32,
@@ -65,6 +66,9 @@ impl OutputKernel {
         let add = module
             .load_function("vector_add")
             .map_err(|e| failure("Résiduel sortie", e))?;
+        let fused = module
+            .load_function("rms_add_rms")
+            .map_err(|e| failure("Norme fusionnée sortie", e))?;
         let columns = branch.matrix().columns();
         let rows = branch.matrix().rows();
         let weights = stream
@@ -93,6 +97,7 @@ impl OutputKernel {
             projected,
             normalized,
             output,
+            fused,
             columns,
             rows,
             epsilon: branch.norm().epsilon(),
@@ -112,29 +117,7 @@ impl OutputKernel {
                 "Dimensions/contexte sortie attention invalides".into(),
             ));
         }
-        let config = LaunchConfig {
-            grid_dim: (
-                if self.kparallel {
-                    self.rows
-                } else {
-                    self.rows.div_ceil(4)
-                },
-                1,
-                1,
-            ),
-            block_dim: (128, 1, 1),
-            shared_mem_bytes: 0,
-        };
-        let mut launch = self.stream.launch_builder(&self.project);
-        launch
-            .arg(&self.weights)
-            .arg(attention)
-            .arg(&mut self.projected)
-            .arg(&self.columns)
-            .arg(&self.rows);
-        // SAFETY: matrice Q4_0 validée, entrée columns et sortie rows ; bloc 128,
-        // ressources vivantes sur le même stream et buffers distincts.
-        unsafe { launch.launch(config) }.map_err(|e| failure("Projection sortie", e))?;
+        self.project(attention)?;
         let config = LaunchConfig {
             grid_dim: (1, 1, 1),
             block_dim: (256, 1, 1),
@@ -163,6 +146,75 @@ impl OutputKernel {
         // SAFETY: trois buffers rows, kernel borné par rows. Le résiduel est
         // l’entrée brute de la branche, pas son entrée normalisée. Aucun alias.
         unsafe { launch.launch(config) }.map_err(|e| failure("Ajout résiduel", e))?;
+        Ok(())
+    }
+    fn project(&mut self, attention: &CudaSlice<f32>) -> Result<(), DiagnosticError> {
+        let config = LaunchConfig {
+            grid_dim: (
+                if self.kparallel {
+                    self.rows
+                } else {
+                    self.rows.div_ceil(4)
+                },
+                1,
+                1,
+            ),
+            block_dim: (128, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        let mut launch = self.stream.launch_builder(&self.project);
+        launch
+            .arg(&self.weights)
+            .arg(attention)
+            .arg(&mut self.projected)
+            .arg(&self.columns)
+            .arg(&self.rows);
+        // SAFETY: matrice Q4_0 validée, entrée columns et sortie rows ; bloc 128,
+        // ressources vivantes sur le même stream et buffers distincts.
+        unsafe { launch.launch(config) }.map_err(|e| failure("Projection sortie", e))?;
+        Ok(())
+    }
+    /// Fused path: projection, then one kernel for post-norm + residual add +
+    /// the FFN pre-norm (written to `normalized`). Bit-identical to the
+    /// separate kernels; requires rows <= 4096.
+    pub(crate) fn run_fused(
+        &mut self,
+        attention: &CudaSlice<f32>,
+        residual: &CudaSlice<f32>,
+        next_scales: &CudaSlice<f32>,
+        next_eps: f32,
+        normalized: &mut CudaSlice<f32>,
+    ) -> Result<(), DiagnosticError> {
+        if attention.len() != self.columns as usize
+            || residual.len() != self.rows as usize
+            || next_scales.len() != self.rows as usize
+            || normalized.len() != self.rows as usize
+            || self.rows > 4096
+        {
+            return Err(DiagnosticError("Dimensions sortie fusionnée invalides".into()));
+        }
+        self.project(attention)?;
+        let mut launch = self.stream.launch_builder(&self.fused);
+        launch
+            .arg(&self.projected)
+            .arg(residual)
+            .arg(&self.scales)
+            .arg(next_scales)
+            .arg(&mut self.output)
+            .arg(normalized)
+            .arg(&self.rows)
+            .arg(&self.epsilon)
+            .arg(&next_eps);
+        // SAFETY: all vectors have rows <= 4096 elements (checked), one 256-thread
+        // block, outputs distinct from inputs.
+        unsafe {
+            launch.launch(LaunchConfig {
+                grid_dim: (1, 1, 1),
+                block_dim: (256, 1, 1),
+                shared_mem_bytes: 0,
+            })
+        }
+        .map_err(|e| failure("Norme/résiduel fusionnés", e))?;
         Ok(())
     }
     pub(crate) fn output(&self) -> &CudaSlice<f32> {
@@ -218,6 +270,83 @@ mod tests {
             let rg = stream.clone_htod(&r).unwrap();
             kernel.run(&ag, &rg).unwrap();
             super::super::matvec::compare(&reference, &kernel.snapshot().unwrap()).unwrap();
+        }
+    }
+}
+
+#[cfg(test)]
+mod fused_tests {
+    use cudarc::driver::{CudaContext, LaunchConfig, PushKernelArg};
+    #[test]
+    #[ignore = "Requires RTX 4090 and CUDA"]
+    fn fused_norm_chains_match_separate_kernels_bits() {
+        let ctx = CudaContext::new(0).unwrap();
+        let stream = ctx.default_stream();
+        let source = format!(
+            "{}
+{}
+{}",
+            include_str!("../../../kernels/ada/rms_norm.cu"),
+            include_str!("../../../kernels/ada/vector_add.cu"),
+            include_str!("../../../kernels/ada/ffn.cu")
+        );
+        let ptx = cudarc::nvrtc::compile_ptx_with_opts(
+            source,
+            cudarc::nvrtc::CompileOptions { arch: Some("compute_89"), ..Default::default() },
+        )
+        .unwrap();
+        let m = ctx.load_module(ptx).unwrap();
+        let f = |n: &str| m.load_function(n).unwrap();
+        let (rms, add, res, chain, post) =
+            (f("rms_norm"), f("vector_add"), f("ffn_residual_scale"), f("rms_add_rms"), f("rms_residual_scale"));
+        let one = LaunchConfig { grid_dim: (1, 1, 1), block_dim: (256, 1, 1), shared_mem_bytes: 0 };
+        let mut state = 0x2545_f491u32;
+        let mut next = |amp: f32| {
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
+            ((state % 65536) as f32 / 32768.0 - 1.0) * amp
+        };
+        for width in [1u32, 255, 256, 1000, 3840, 4096] {
+            let n = width as usize;
+            let mut vec = |amp: f32| stream.clone_htod(&(0..n).map(|_| next(amp)).collect::<Vec<_>>()).unwrap();
+            let (p, r, s1, s2) = (vec(40.0), vec(3.0), vec(2.0), vec(2.0));
+            let z = || stream.alloc_zeros::<f32>(n).unwrap();
+            let (e1, e2, scale) = (1e-6f32, 1e-6f32, 0.73f32);
+            let grid = LaunchConfig { grid_dim: (width.div_ceil(256), 1, 1), ..one };
+            // Reference: separate kernels.
+            let (mut a, mut h, mut nrm) = (z(), z(), z());
+            let mut l = stream.launch_builder(&rms);
+            l.arg(&p).arg(&s1).arg(&mut a).arg(&width).arg(&e1);
+            // SAFETY: vectors of `width` <= 4096 elements, distinct outputs.
+            unsafe { l.launch(one) }.unwrap();
+            let mut l = stream.launch_builder(&add);
+            l.arg(&r).arg(&a).arg(&mut h).arg(&width);
+            // SAFETY: vectors of `width` <= 4096 elements, distinct outputs.
+            unsafe { l.launch(grid) }.unwrap();
+            let mut l = stream.launch_builder(&rms);
+            l.arg(&h).arg(&s2).arg(&mut nrm).arg(&width).arg(&e2);
+            // SAFETY: vectors of `width` <= 4096 elements, distinct outputs.
+            unsafe { l.launch(one) }.unwrap();
+            let (mut fh, mut fn_) = (z(), z());
+            let mut l = stream.launch_builder(&chain);
+            l.arg(&p).arg(&r).arg(&s1).arg(&s2).arg(&mut fh).arg(&mut fn_).arg(&width).arg(&e1).arg(&e2);
+            // SAFETY: vectors of `width` <= 4096 elements, distinct outputs.
+            unsafe { l.launch(one) }.unwrap();
+            let (mut o, mut fo) = (z(), z());
+            let mut l = stream.launch_builder(&res);
+            l.arg(&a).arg(&r).arg(&mut o).arg(&width).arg(&scale);
+            // SAFETY: vectors of `width` <= 4096 elements, distinct outputs.
+            unsafe { l.launch(grid) }.unwrap();
+            let mut l = stream.launch_builder(&post);
+            l.arg(&p).arg(&r).arg(&s1).arg(&mut fo).arg(&width).arg(&e1).arg(&scale);
+            // SAFETY: vectors of `width` <= 4096 elements, distinct outputs.
+            unsafe { l.launch(one) }.unwrap();
+            let get = |x: &cudarc::driver::CudaSlice<f32>| stream.clone_dtoh(x).unwrap();
+            for (name, x, y) in [("h", &h, &fh), ("normalized", &nrm, &fn_), ("ffn out", &o, &fo)] {
+                let (x, y) = (get(x), get(y));
+                assert!(x.iter().zip(&y).all(|(a, b)| a.to_bits() == b.to_bits()), "{name} width {width}");
+            }
         }
     }
 }
