@@ -65,9 +65,16 @@ Tout est commité et fusionné dans `master`. Tous les tests du workspace (y com
 | Petit modèle de brouillon Gemma 4 (même tokenizer) pour la spéculation | ×1,5 à ×2 en conversation libre | téléchargement d'un modèle et support d'une seconde architecture |
 | Cache KV en FP16 | long contexte nettement plus rapide, moitié moins de VRAM pour le cache | bits différents : validation par top-1 et divergence KL |
 | Tensor Cores pour le prefill | prefill plusieurs fois plus rapide | bits différents |
-| Cache KV circulaire pour les couches locales (fenêtre de 1 024) | environ 6,7 Go de VRAM récupérés, contexte de 32k possible | aucun sur les résultats, seulement de l'adressage |
 | Jeu de prompts de mesure (chat, code, résumé, traduction, recopie) | chiffres moyens fiables, surtout pour la spéculation | aucun (`scripts/bench_suite.py` est prêt mais n'a pas été lancé) |
 | Spéculation sur plusieurs requêtes en parallèle (débit serveur) | débit total bien supérieur | ne change pas la vitesse d'une conversation seule |
+
+## Deuxième lot de pistes (mesurées)
+
+- **Cache KV circulaire pour les couches locales : fait.** Fenêtre + 32 positions, calculs inchangés, test de rebouclage bit à bit. **VRAM à 10 240 tokens : 17,0 → 11,3 Go.** Le contexte du chat passe ainsi à **32 768 tokens** (environ 11,8 Go). Testé à 20 511 tokens de prompt : réponse correcte, 72 tok/s.
+- **Épinglage dans le cache L2 : écarté.** Les fenêtres locales totalisent environ 670 Mo, ce qui ne tient pas dans 32 Mo de L2.
+- **Brouillon par sortie anticipée : écarté.** Accord avec le vrai token de 0 % jusqu'à 32 couches et de 7 à 13 % après 40 couches (mesuré sur 3 prompts).
+- **Élagage de la tête par Cauchy-Schwarz : écarté.** 0 % des lignes sont éliminables, le meilleur logit vaut ≈ 0,13 × ‖x‖, bien en dessous des bornes ‖Wᵢ‖·‖x‖.
+- **Table n-gram statique : peu rentable en l'état.** Simulée sur 40 réponses générées par le modèle (table apprise sur les 39 autres) : 1,017 → 1,06 à 1,12 token par passe. Avec le surcoût des passes avec proposition, le gain net est proche de zéro. Un corpus de plusieurs milliers de conversations (plusieurs heures de génération) pourrait changer la donne, sans garantie.
 
 ## Pour reproduire
 ```
