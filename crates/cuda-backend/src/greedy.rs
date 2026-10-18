@@ -5,6 +5,8 @@ use cudarc::{
     nvrtc::{CompileOptions, compile_ptx_with_opts},
 };
 use std::sync::Arc;
+/// Most rows `select_many` handles in one call.
+pub(crate) const MANY: usize = 16;
 pub(crate) struct GpuGreedy {
     stream: Arc<CudaStream>,
     partial: CudaFunction,
@@ -13,6 +15,8 @@ pub(crate) struct GpuGreedy {
     ids: CudaSlice<u32>,
     bad: CudaSlice<u32>,
     result: CudaSlice<u32>,
+    /// Results of `select_many`, two u32 per row (id, bad flag).
+    results: CudaSlice<u32>,
     count: u32,
     groups: u32,
 }
@@ -57,8 +61,76 @@ impl GpuGreedy {
             result: stream
                 .alloc_zeros(2)
                 .map_err(|e| failure("Résultat greedy", e))?,
+            results: stream
+                .alloc_zeros(2 * MANY)
+                .map_err(|e| failure("Résultats greedy", e))?,
             stream,
         })
+    }
+    /// Greedy ids of `n` consecutive rows of `count` logits, with a single
+    /// device-to-host read. Each id equals `select` on that row.
+    pub(crate) fn select_many(
+        &mut self,
+        input: &CudaSlice<f32>,
+        n: usize,
+    ) -> Result<Vec<u32>, DiagnosticError> {
+        let count = self.count as usize;
+        if n == 0 || n > MANY || input.len() < n * count || input.context() != self.stream.context() {
+            return Err(DiagnosticError("Entrée greedy multiple incompatible".into()));
+        }
+        for row in 0..n {
+            let x = input.slice(row * count..(row + 1) * count);
+            let mut launch = self.stream.launch_builder(&self.partial);
+            launch
+                .arg(&x)
+                .arg(&mut self.values)
+                .arg(&mut self.ids)
+                .arg(&mut self.bad)
+                .arg(&self.count);
+            // SAFETY: the view holds count logits; scratch sized for ceil(count/256) groups.
+            unsafe {
+                launch.launch(LaunchConfig {
+                    grid_dim: (self.groups, 1, 1),
+                    block_dim: (256, 1, 1),
+                    shared_mem_bytes: 0,
+                })
+            }
+            .map_err(|e| failure("Réduction greedy partielle", e))?;
+            let mut out = self.results.slice_mut(2 * row..2 * row + 2);
+            let mut launch = self.stream.launch_builder(&self.finish);
+            launch
+                .arg(&self.values)
+                .arg(&self.ids)
+                .arg(&self.bad)
+                .arg(&mut out)
+                .arg(&self.groups);
+            // SAFETY: single block; scratch is consumed in stream order before reuse.
+            unsafe {
+                launch.launch(LaunchConfig {
+                    grid_dim: (1, 1, 1),
+                    block_dim: (256, 1, 1),
+                    shared_mem_bytes: 0,
+                })
+            }
+            .map_err(|e| failure("Réduction greedy finale", e))?;
+        }
+        let results = self
+            .stream
+            .clone_dtoh(&self.results.slice(0..2 * n))
+            .map_err(|e| failure("Lecture IDs greedy", e))?;
+        self.stream
+            .synchronize()
+            .map_err(|e| failure("Synchronisation greedy", e))?;
+        results
+            .chunks(2)
+            .map(|r| {
+                if r[1] != 0 || r[0] >= self.count {
+                    Err(DiagnosticError("Logits non finis ou ID greedy invalide".into()))
+                } else {
+                    Ok(r[0])
+                }
+            })
+            .collect()
     }
     pub(crate) fn select(&mut self, input: &CudaSlice<f32>) -> Result<u32, DiagnosticError> {
         if input.len() != self.count as usize || input.context() != self.stream.context() {
@@ -140,6 +212,33 @@ mod tests {
                 let device = stream.clone_htod(&values).unwrap();
                 assert!(select.select(&device).is_err());
             }
+        }
+    }
+    #[test]
+    #[ignore = "Nécessite RTX 4090 et CUDA 13.3"]
+    fn select_many_matches_select_per_row() {
+        let ctx = cudarc::driver::CudaContext::new(0).unwrap();
+        let stream = ctx.default_stream();
+        for size in [1u32, 257, 262144] {
+            let mut select = GpuGreedy::new(stream.clone(), size).unwrap();
+            let n = 5usize;
+            let mut values = vec![-3.0f32; n * size as usize];
+            for row in 0..n {
+                let base = row * size as usize;
+                values[base + (row * 7919) % size as usize] = 2.0;
+                values[base] = 2.0; // tie with the first index
+            }
+            let device = stream.clone_htod(&values).unwrap();
+            let many = select.select_many(&device, n).unwrap();
+            for row in 0..n {
+                let one = stream
+                    .clone_htod(&values[row * size as usize..(row + 1) * size as usize])
+                    .unwrap();
+                assert_eq!(many[row], select.select(&one).unwrap(), "size {size} row {row}");
+            }
+            values[size as usize] = f32::NAN;
+            let device = stream.clone_htod(&values).unwrap();
+            assert!(select.select_many(&device, n).is_err());
         }
     }
 }

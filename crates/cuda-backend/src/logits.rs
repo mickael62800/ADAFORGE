@@ -522,15 +522,7 @@ impl ResidentHead {
             .map_err(|e| failure("Projection lot", e))?;
             first += m;
         }
-        let mut ids = Vec::with_capacity(n);
-        for t in 0..n {
-            let src = raw.slice(t * rows..(t + 1) * rows);
-            self.stream
-                .memcpy_dtod(&src, &mut self.raw)
-                .map_err(|e| failure("Copie logits lot", e))?;
-            ids.push(self.selection.select(&self.raw)?);
-        }
-        Ok(ids)
+        self.selection.select_many(raw, n)
     }
     pub(crate) fn select(&mut self, input: &CudaSlice<f32>) -> Result<u32, DiagnosticError> {
         self.project_gpu(input)?;
