@@ -169,20 +169,102 @@ impl AttentionKernel {
         state: Option<&CudaSlice<u32>>,
         score_blocks: u32,
     ) -> Result<(), DiagnosticError> {
-        let c = self.config;
         let split = self.split.as_mut().expect("split attention");
+        Self::launch_split_into(
+            &self.stream,
+            self.config,
+            split,
+            None,
+            query,
+            keys,
+            values,
+            &mut self.output,
+            tokens,
+            position,
+            state,
+            score_blocks,
+            1,
+        )
+    }
+    /// Batched prefill attention: `queries` holds n rotated Q vectors for
+    /// positions position..position+n, whose K/V are already in `cache`.
+    /// Writes n outputs [n][q_heads*width]. Bit-identical to n single runs.
+    pub(crate) fn run_batch(
+        &mut self,
+        queries: &CudaSlice<f32>,
+        cache: &KvCache,
+        position: u32,
+        n: u32,
+        scores: &mut CudaSlice<f32>,
+        output: &mut CudaSlice<f32>,
+    ) -> Result<(), DiagnosticError> {
+        let data = cache.resident()?;
+        let c = self.config;
+        let per_query = (c.q_heads() * c.width()) as usize;
+        if n == 0
+            || data.tokens != position + n
+            || data.tokens > super::stack::MAX_CONTEXT
+            || queries.len() < n as usize * per_query
+            || output.len() < n as usize * per_query
+            || scores.len() < (n * c.q_heads() * super::stack::MAX_CONTEXT) as usize
+        {
+            return Err(DiagnosticError("Attention par lots invalide".into()));
+        }
+        let Some(split) = self.split.as_mut() else {
+            return Err(DiagnosticError("Attention scindée requise pour les lots".into()));
+        };
+        let blocks = data.tokens.div_ceil(16).clamp(1, 32);
+        Self::launch_split_into(
+            &self.stream,
+            c,
+            split,
+            Some(scores),
+            queries,
+            data.keys,
+            data.values,
+            output,
+            data.tokens,
+            position,
+            None,
+            blocks,
+            n,
+        )
+    }
+    pub(crate) fn supports_batch(&self) -> bool {
+        self.split.is_some()
+    }
+    #[allow(clippy::too_many_arguments)]
+    fn launch_split_into(
+        stream: &Arc<CudaStream>,
+        c: AttentionConfig,
+        split: &mut SplitAttention,
+        scores_override: Option<&mut CudaSlice<f32>>,
+        query: &CudaSlice<f32>,
+        keys: &CudaSlice<f32>,
+        values: &CudaSlice<f32>,
+        output: &mut CudaSlice<f32>,
+        tokens: u32,
+        position: u32,
+        state: Option<&CudaSlice<u32>>,
+        score_blocks: u32,
+        queries: u32,
+    ) -> Result<(), DiagnosticError> {
+        let scores: &mut CudaSlice<f32> = match scores_override {
+            Some(s) => s,
+            None => &mut split.scores,
+        };
         let (width, qheads, kvheads) = (c.width(), c.q_heads(), c.kv_heads());
         let window = c.window().unwrap_or(0);
         let scale = c.scale();
         let stride = super::stack::MAX_CONTEXT;
         let null = 0u64;
         let cfg = |x: u32, y: u32, threads: u32| LaunchConfig {
-            grid_dim: (x, y, 1),
+            grid_dim: (x, y, queries),
             block_dim: (threads, 1, 1),
             shared_mem_bytes: 0,
         };
-        let mut l = self.stream.launch_builder(&split.scores_fn);
-        l.arg(query).arg(keys).arg(&mut split.scores).arg(&width).arg(&qheads).arg(&kvheads)
+        let mut l = stream.launch_builder(&split.scores_fn);
+        l.arg(query).arg(keys).arg(&mut *scores).arg(&width).arg(&qheads).arg(&kvheads)
             .arg(&tokens).arg(&position).arg(&window).arg(&scale).arg(&stride);
         match state {
             Some(st) => l.arg(st),
@@ -192,16 +274,16 @@ impl AttentionKernel {
         // scores per head; blocks past the visible range return immediately.
         unsafe { l.launch(cfg(qheads / split.heads_per_warp, score_blocks, 256)) }
             .map_err(|e| failure("Scores attention", e))?;
-        let mut l = self.stream.launch_builder(&split.softmax_fn);
-        l.arg(&mut split.scores).arg(&tokens).arg(&position).arg(&window).arg(&stride);
+        let mut l = stream.launch_builder(&split.softmax_fn);
+        l.arg(&mut *scores).arg(&tokens).arg(&position).arg(&window).arg(&stride);
         match state {
             Some(st) => l.arg(st),
             None => l.arg(&null),
         };
         // SAFETY: one 256-thread block per head over its own score row.
         unsafe { l.launch(cfg(qheads, 1, 256)) }.map_err(|e| failure("Softmax attention", e))?;
-        let mut l = self.stream.launch_builder(&split.values_fn);
-        l.arg(&split.scores).arg(values).arg(&mut self.output).arg(&width).arg(&qheads)
+        let mut l = stream.launch_builder(&split.values_fn);
+        l.arg(&*scores).arg(values).arg(output).arg(&width).arg(&qheads)
             .arg(&kvheads).arg(&tokens).arg(&position).arg(&window).arg(&stride);
         match state {
             Some(st) => l.arg(st),

@@ -132,6 +132,9 @@ extern "C" __global__ void attention_split_scores(const float* q,const float* ke
     unsigned int width,unsigned int q_heads,unsigned int kv_heads,unsigned int tokens,unsigned int position,
     unsigned int window,float scale,unsigned int stride_scores,const unsigned int* state){
     if(state){tokens=state[1]+1;position=state[1];}
+    // Batched prefill: query z sits at position+z (its K/V already cached).
+    position+=blockIdx.z;q+=(unsigned long long)blockIdx.z*q_heads*width;
+    scores+=(unsigned long long)blockIdx.z*q_heads*stride_scores;
     const unsigned int head=blockIdx.x,kv=head/(q_heads/kv_heads);
     unsigned int start,end;split_range(tokens,position,window,start,end);
     const unsigned int n=end-start,warp=threadIdx.x/32,lane=threadIdx.x&31;
@@ -163,9 +166,10 @@ extern "C" __global__ void attention_split_scores(const float* q,const float* ke
 extern "C" __global__ void attention_split_softmax(float* scores,unsigned int tokens,unsigned int position,
     unsigned int window,unsigned int stride_scores,const unsigned int* state){
     if(state){tokens=state[1]+1;position=state[1];}
+    position+=blockIdx.z;
     unsigned int start,end;split_range(tokens,position,window,start,end);
     const unsigned int n=end-start,thread=threadIdx.x,warp=thread/32,lane=thread&31;
-    float* s=scores+(unsigned long long)blockIdx.x*stride_scores;
+    float* s=scores+((unsigned long long)blockIdx.z*gridDim.x+blockIdx.x)*stride_scores;
     __shared__ float part[8];
     __shared__ float maximum,total;
     float m=-3.402823466e38F;
@@ -209,6 +213,9 @@ template<int HPT> __device__ void split_values_impl(const float* scores,const fl
     unsigned int width,unsigned int q_heads,unsigned int kv_heads,unsigned int tokens,unsigned int position,
     unsigned int window,unsigned int stride_scores,const unsigned int* state){
     if(state){tokens=state[1]+1;position=state[1];}
+    position+=blockIdx.z;
+    scores+=(unsigned long long)blockIdx.z*q_heads*stride_scores;
+    output+=(unsigned long long)blockIdx.z*q_heads*width;
     unsigned int start,end;split_range(tokens,position,window,start,end);
     const unsigned int head0=blockIdx.x*HPT,c=blockIdx.y*64+threadIdx.x;
     if(c>=width)return;
@@ -250,6 +257,8 @@ template<int HPT> __device__ void split_scores_shared(const float* q,const float
     unsigned int width,unsigned int q_heads,unsigned int kv_heads,unsigned int tokens,unsigned int position,
     unsigned int window,float scale,unsigned int stride_scores,const unsigned int* state){
     if(state){tokens=state[1]+1;position=state[1];}
+    position+=blockIdx.z;q+=(unsigned long long)blockIdx.z*q_heads*width;
+    scores+=(unsigned long long)blockIdx.z*q_heads*stride_scores;
     const unsigned int head0=blockIdx.x*HPT,kv=head0/(q_heads/kv_heads);
     unsigned int start,end;split_range(tokens,position,window,start,end);
     const unsigned int n=end-start,warp=threadIdx.x/32,lane=threadIdx.x&31;

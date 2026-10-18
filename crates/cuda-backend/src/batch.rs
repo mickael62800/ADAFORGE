@@ -263,6 +263,10 @@ pub(crate) struct BatchBuffers {
     pub permuted: CudaSlice<f32>,
     pub raw: [CudaSlice<f32>; 3],
     pub attention: CudaSlice<f32>,
+    /// Rotated queries of the batch, [n][q_heads*width].
+    pub queries: CudaSlice<f32>,
+    /// Attention scores of the batch, [n][q_heads][MAX_CONTEXT].
+    pub scores: CudaSlice<f32>,
     pub projected: CudaSlice<f32>,
     pub hidden: CudaSlice<f32>,
     pub gate: CudaSlice<f32>,
@@ -278,6 +282,7 @@ impl BatchBuffers {
         qkv_rows: [u32; 3],
         attention_width: u32,
         intermediate: u32,
+        q_heads: u32,
     ) -> Result<Self, DiagnosticError> {
         let alloc = |n: u32| {
             stream
@@ -292,6 +297,10 @@ impl BatchBuffers {
             permuted: alloc(widest)?,
             raw: [alloc(qkv_rows[0])?, alloc(qkv_rows[1])?, alloc(qkv_rows[2])?],
             attention: alloc(attention_width)?,
+            queries: alloc(attention_width)?,
+            scores: stream
+                .alloc_zeros::<f32>(MAX_BATCH * q_heads as usize * super::stack::MAX_CONTEXT as usize)
+                .map_err(|e| failure("Scores lot", e))?,
             projected: alloc(width)?,
             hidden: alloc(width)?,
             gate: alloc(intermediate)?,

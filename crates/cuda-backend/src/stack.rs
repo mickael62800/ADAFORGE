@@ -299,6 +299,16 @@ impl ResidentLayer {
         position: u32,
         state: Option<&CudaSlice<u32>>,
     ) -> Result<(), DiagnosticError> {
+        self.attend_inner(position, state, true)
+    }
+    /// With `run_attention == false` (direct path only), stops after the K/V
+    /// cache write; the rotated query is left in self.rotated[0].
+    fn attend_inner(
+        &mut self,
+        position: u32,
+        state: Option<&CudaSlice<u32>>,
+        run_attention: bool,
+    ) -> Result<(), DiagnosticError> {
         if self.grouped_qkv_prep {
             let qheads = self.rows[0] / self.head_width;
             let kvheads = self.rows[1] / self.head_width;
@@ -446,8 +456,10 @@ impl ResidentLayer {
                 .run_graph(&self.rotated[0], &self.cache, state, self.capacity)?;
         } else {
             self.cache.append(&self.rotated[1], &self.heads[2])?;
-            self.attention
-                .run(&self.rotated[0], &self.cache, position)?;
+            if run_attention {
+                self.attention
+                    .run(&self.rotated[0], &self.cache, position)?;
+            }
         }
         Ok(())
     }
@@ -477,6 +489,7 @@ impl ResidentLayer {
             k.matvec(&self.matrices[i], &buf.permuted, &mut buf.raw[i], width, self.rows[i], n, false)?;
         }
         let qwidth = self.rows[0];
+        let batched_attention = self.attention.supports_batch();
         for t in 0..n {
             for i in 0..projections {
                 let rows = self.rows[i] as usize;
@@ -485,12 +498,31 @@ impl ResidentLayer {
                     .memcpy_dtod(&src, &mut self.raw[i])
                     .map_err(|e| failure("Copie QKV lot", e))?;
             }
-            self.attend(start + t, None)?;
             let q = qwidth as usize;
-            let mut dst = buf.attention.slice_mut(t as usize * q..(t as usize + 1) * q);
-            self.stream
-                .memcpy_dtod(self.attention.output(), &mut dst)
-                .map_err(|e| failure("Copie attention lot", e))?;
+            if batched_attention {
+                // Prep + K/V write now; attention for the whole batch below.
+                self.attend_inner(start + t, None, false)?;
+                let mut dst = buf.queries.slice_mut(t as usize * q..(t as usize + 1) * q);
+                self.stream
+                    .memcpy_dtod(&self.rotated[0], &mut dst)
+                    .map_err(|e| failure("Copie requête lot", e))?;
+            } else {
+                self.attend(start + t, None)?;
+                let mut dst = buf.attention.slice_mut(t as usize * q..(t as usize + 1) * q);
+                self.stream
+                    .memcpy_dtod(self.attention.output(), &mut dst)
+                    .map_err(|e| failure("Copie attention lot", e))?;
+            }
+        }
+        if batched_attention {
+            self.attention.run_batch(
+                &buf.queries,
+                &self.cache,
+                start,
+                n,
+                &mut buf.scores,
+                &mut buf.attention,
+            )?;
         }
         let (out_w, post_scales, post_eps, columns, rows) = self.output_branch.batch_parts();
         k.permute(&buf.attention, &mut buf.permuted, n * columns)?;
@@ -877,7 +909,20 @@ impl CudaGenerationSession {
             }
             intermediate = intermediate.max(l.ffn.batch_parts().map_or(0, |f| f.intermediate));
         }
-        let buffers = super::batch::BatchBuffers::new(&stream, self.layers[0].width, rows, rows[0], intermediate)?;
+        let q_heads = self
+            .layers
+            .iter()
+            .map(|l| l.rows[0] / l.head_width)
+            .max()
+            .unwrap_or(1);
+        let buffers = super::batch::BatchBuffers::new(
+            &stream,
+            self.layers[0].width,
+            rows,
+            rows[0],
+            intermediate,
+            q_heads,
+        )?;
         self.batch = Some((super::batch::BatchKernels::new(stream)?, buffers));
         Ok(())
     }
