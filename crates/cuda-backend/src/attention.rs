@@ -150,6 +150,7 @@ impl AttentionKernel {
         Ok(())
     }
     /// Launches the split kernels. `state` (graph) overrides tokens/position.
+    #[allow(clippy::too_many_arguments)]
     fn launch_split(
         &mut self,
         query: &CudaSlice<f32>,
