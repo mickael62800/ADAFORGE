@@ -592,3 +592,7 @@ Les premières comparaisons donnent seulement un petit gain : 73.37 tok/s contre
 Les tuiles Q4 synchrones sont maintenant sélectionnées par défaut pour le FFN Gemma 3840/15360, sans duplication des poids GPU. Une qualification ABBA donne 72,27/72,45 contre 69,74/69,81 tok/s sur le prompt testé (+3,7 %), avec IDs identiques ; ce résultat ne garantit pas le même gain sur tous les contextes. L'override historique `ADAFORGE_EXPERIMENTAL_TILED_GATE=0` permet de revenir au natif. Les variantes `cp.async` testées sont correctes mais plus lentes et restent dans le banc de recherche. Voir [résultats et protocole](docs/optimization-async-and-abba.md).
 
 Le [plan consolidé](docs/optimization-plan.md) regroupe les pistes AdaForge, Imp, Marlin et Ada, les essais écartés et leurs dépendances. La [lecture détaillée de Marlin](docs/marlin-review.md) décrit le kernel et les différences avec notre GGUF à groupes de 32. Les sources de référence sont conservées sous `tools/marlin-reference` sans ajout de dépendance au moteur.
+
+## Optimisations d'octobre 2026
+
+Génération ~95 tok/s sur prompt court (79 avant), ~200 tok/s quand la réponse reprend le prompt (décodage spéculatif greedy), ~83 tok/s à 7 600 tokens de contexte (26 avant). Premier token ~40 ms, prefill de 7 620 tokens en ~16,5 s, contexte du chat porté à 10 240 tokens. Toutes ces optimisations gardent des résultats bit-à-bit identiques. Détails, essais écartés et variables d'environnement : [docs/optimization-2026-10.md](docs/optimization-2026-10.md).
