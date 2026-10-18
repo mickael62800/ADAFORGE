@@ -189,3 +189,4 @@ template<int B> __device__ void q4_batch_tiled_gate_dual_t(const unsigned short*
 extern "C" __global__ void q4_batch_tiled_gate_dual_b##B(const unsigned short* c,const unsigned short* s,const float* x,float* g,float* u,unsigned int columns,unsigned int rows){q4_batch_tiled_gate_dual_t<B>(c,s,x,g,u,columns,rows*2);}
 Q4_TILED_DUAL_INST(1) Q4_TILED_DUAL_INST(2) Q4_TILED_DUAL_INST(3) Q4_TILED_DUAL_INST(4)
 Q4_TILED_DUAL_INST(5) Q4_TILED_DUAL_INST(6) Q4_TILED_DUAL_INST(7) Q4_TILED_DUAL_INST(8)
+

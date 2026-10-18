@@ -551,9 +551,14 @@ mod tests {
                 })
                 .collect();
             let xs = stream.clone_htod(&permuted).unwrap();
-            for (kpar, single, batch) in [(false, "q4_matvec", "q4_batch_matvec_b"), (true, "q4_matvec_kparallel", "q4_batch_kparallel_b")] {
-                let grid = if kpar { rows } else { rows.div_ceil(4) };
+            for (kpar, single, batch) in [
+                (false, "q4_matvec", "q4_batch_matvec_b"),
+                (true, "q4_matvec_kparallel", "q4_batch_kparallel_b"),
+            ] {
+                let dual = batch.contains("dual");
+                let grid = if dual { rows.div_ceil(2) } else if kpar { rows } else { rows.div_ceil(4) };
                 let cfg = LaunchConfig { grid_dim: (grid, 1, 1), block_dim: (128, 1, 1), shared_mem_bytes: 0 };
+                let ref_cfg = LaunchConfig { grid_dim: (if kpar { rows } else { rows.div_ceil(4) }, 1, 1), ..cfg };
                 let fs = module.load_function(single).unwrap();
                 // Reference: single-token kernel, token by token.
                 let mut expected = Vec::new();
@@ -563,12 +568,12 @@ mod tests {
                     let mut l = stream.launch_builder(&fs);
                     l.arg(&weights[0]).arg(&xt).arg(&mut y).arg(&columns).arg(&rows);
                     // SAFETY: validated matrix, x has columns floats, y rows floats.
-                    unsafe { l.launch(cfg) }.unwrap();
+                    unsafe { l.launch(ref_cfg) }.unwrap();
                     expected.extend(stream.clone_dtoh(&y).unwrap());
                 }
                 let mut y = stream.alloc_zeros::<f32>(rows as usize * 16).unwrap();
                 let mut report = String::new();
-                for n in [1u32, 2, 4, 8, 12, 16] {
+                for n in [1u32, 2, 4, 8, 12, 16].into_iter().filter(|&n| !dual || n <= 8) {
                     let fb = module.load_function(&format!("{batch}{n}")).unwrap();
                     let mut samples = Vec::new();
                     for rep in 0..4 {
@@ -587,11 +592,11 @@ mod tests {
                     samples.sort_by(f32::total_cmp);
                     let got = stream.clone_dtoh(&y).unwrap();
                     for i in 0..(n * rows) as usize {
-                        assert_eq!(got[i].to_bits(), expected[i].to_bits(), "{columns}x{rows} kpar={kpar} n={n} i={i}");
+                        assert_eq!(got[i].to_bits(), expected[i].to_bits(), "{columns}x{rows} {batch} n={n} i={i}");
                     }
                     report += &format!(" n{n}={:.1}us", samples[1] * 1000.0);
                 }
-                println!("BATCH {columns}x{rows} kpar={kpar}:{report}");
+                println!("BATCH {columns}x{rows} {batch}:{report}");
             }
         }
     }
