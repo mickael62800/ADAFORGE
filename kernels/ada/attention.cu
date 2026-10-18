@@ -130,7 +130,7 @@ __device__ __forceinline__ void split_range(unsigned int tokens,unsigned int pos
 }
 extern "C" __global__ void attention_split_scores(const float* q,const float* keys,float* scores,
     unsigned int width,unsigned int q_heads,unsigned int kv_heads,unsigned int tokens,unsigned int position,
-    unsigned int window,float scale,unsigned int stride_scores,const unsigned int* state){
+    unsigned int window,float scale,unsigned int stride_scores,const unsigned int* state,unsigned int ring){
     if(state){tokens=state[1]+1;position=state[1];}
     // Batched prefill: query z sits at position+z (its K/V already cached).
     position+=blockIdx.z;q+=(unsigned long long)blockIdx.z*q_heads*width;
@@ -146,13 +146,16 @@ extern "C" __global__ void attention_split_scores(const float* q,const float* ke
     for(unsigned int k=0;k<16;++k){const unsigned int c=lane+k*32;qr[k]=c<width?q[(unsigned long long)head*width+c]:0.0f;}
     const float* kb=keys+(unsigned long long)kv*width;
     float* out=scores+(unsigned long long)head*stride_scores;
+    // Ring slots advance incrementally; the modulo only runs on a wrap.
+    unsigned int slot=(start+first)%ring;
     for(unsigned int i=first;i<n;i+=2*step){
         const bool second=i+step<n;
-        const unsigned long long t=start+i,t2=t+step;
+        unsigned int slot2=slot+step;if(slot2>=ring)slot2%=ring;
         float ka[16],kc[16];
         #pragma unroll
         for(unsigned int k=0;k<16;++k){const unsigned int c=lane+k*32;
-            ka[k]=c<width?kb[t*stride+c]:0.0f;kc[k]=(second&&c<width)?kb[t2*stride+c]:0.0f;}
+            ka[k]=c<width?kb[(unsigned long long)slot*stride+c]:0.0f;kc[k]=(second&&c<width)?kb[(unsigned long long)slot2*stride+c]:0.0f;}
+        slot=slot2+step;if(slot>=ring)slot%=ring;
         float pa[8]={0.0f},pc[8]={0.0f};
         #pragma unroll
         for(unsigned int k=0;k<16;++k)if(lane+k*32<width){pa[k%8]+=qr[k]*ka[k];pc[k%8]+=qr[k]*kc[k];}
@@ -164,7 +167,7 @@ extern "C" __global__ void attention_split_scores(const float* q,const float* ke
     }
 }
 extern "C" __global__ void attention_split_softmax(float* scores,unsigned int tokens,unsigned int position,
-    unsigned int window,unsigned int stride_scores,const unsigned int* state){
+    unsigned int window,unsigned int stride_scores,const unsigned int* state,unsigned int ring){
     if(state){tokens=state[1]+1;position=state[1];}
     position+=blockIdx.z;
     unsigned int start,end;split_range(tokens,position,window,start,end);
@@ -211,7 +214,7 @@ extern "C" __global__ void attention_split_softmax(float* scores,unsigned int to
 // them; each (head, channel) sum still runs over tokens in order.
 template<int HPT> __device__ void split_values_impl(const float* scores,const float* values,float* output,
     unsigned int width,unsigned int q_heads,unsigned int kv_heads,unsigned int tokens,unsigned int position,
-    unsigned int window,unsigned int stride_scores,const unsigned int* state){
+    unsigned int window,unsigned int stride_scores,const unsigned int* state,unsigned int ring){
     if(state){tokens=state[1]+1;position=state[1];}
     position+=blockIdx.z;
     scores+=(unsigned long long)blockIdx.z*q_heads*stride_scores;
@@ -222,15 +225,17 @@ template<int HPT> __device__ void split_values_impl(const float* scores,const fl
     const unsigned int kv=head0/(q_heads/kv_heads),n=end-start;
     const unsigned long long stride=(unsigned long long)kv_heads*width;
     const float* p=scores+(unsigned long long)head0*stride_scores;
-    const float* vp=values+(unsigned long long)kv*width+c+(unsigned long long)start*stride;
+    const float* vp=values+(unsigned long long)kv*width+c;
+    // Token start+i lives in ring slot (start+i)%ring.
     float sum[HPT];
     #pragma unroll
     for(int h=0;h<HPT;++h)sum[h]=0.0f;
     unsigned int i=0;
     for(;i+64<=n;i+=64){
         float vv[64];
+        const unsigned int base=(start+i)%ring;
         #pragma unroll
-        for(unsigned int u=0;u<64;++u)vv[u]=vp[(unsigned long long)(i+u)*stride];
+        for(unsigned int u=0;u<64;++u){unsigned int sl=base+u;if(sl>=ring)sl%=ring;vv[u]=vp[(unsigned long long)sl*stride];}
         #pragma unroll
         for(unsigned int u=0;u<64;++u){
             #pragma unroll
@@ -238,15 +243,15 @@ template<int HPT> __device__ void split_values_impl(const float* scores,const fl
         }
     }
     for(;i<n;++i){
-        const float v=vp[(unsigned long long)i*stride];
+        const float v=vp[(unsigned long long)((start+i)%ring)*stride];
         #pragma unroll
         for(int h=0;h<HPT;++h)sum[h]+=p[(unsigned long long)h*stride_scores+i]*v;
     }
     #pragma unroll
     for(int h=0;h<HPT;++h)output[(unsigned long long)(head0+h)*width+c]=sum[h];
 }
-#define SPLIT_VALUES_ARGS const float* scores,const float* values,float* output,unsigned int width,unsigned int q_heads,unsigned int kv_heads,unsigned int tokens,unsigned int position,unsigned int window,unsigned int stride_scores,const unsigned int* state
-#define SPLIT_VALUES_PASS scores,values,output,width,q_heads,kv_heads,tokens,position,window,stride_scores,state
+#define SPLIT_VALUES_ARGS const float* scores,const float* values,float* output,unsigned int width,unsigned int q_heads,unsigned int kv_heads,unsigned int tokens,unsigned int position,unsigned int window,unsigned int stride_scores,const unsigned int* state,unsigned int ring
+#define SPLIT_VALUES_PASS scores,values,output,width,q_heads,kv_heads,tokens,position,window,stride_scores,state,ring
 extern "C" __global__ void attention_split_values(SPLIT_VALUES_ARGS){split_values_impl<1>(SPLIT_VALUES_PASS);}
 extern "C" __global__ void attention_split_values_h2(SPLIT_VALUES_ARGS){split_values_impl<2>(SPLIT_VALUES_PASS);}
 extern "C" __global__ void attention_split_values_h4(SPLIT_VALUES_ARGS){split_values_impl<4>(SPLIT_VALUES_PASS);}
@@ -255,7 +260,7 @@ extern "C" __global__ void attention_split_values_h4(SPLIT_VALUES_ARGS){split_va
 // all of them. Per head, the dot product uses the same 8-group tree as above.
 template<int HPT> __device__ void split_scores_shared(const float* q,const float* keys,float* scores,
     unsigned int width,unsigned int q_heads,unsigned int kv_heads,unsigned int tokens,unsigned int position,
-    unsigned int window,float scale,unsigned int stride_scores,const unsigned int* state){
+    unsigned int window,float scale,unsigned int stride_scores,const unsigned int* state,unsigned int ring){
     if(state){tokens=state[1]+1;position=state[1];}
     position+=blockIdx.z;q+=(unsigned long long)blockIdx.z*q_heads*width;
     scores+=(unsigned long long)blockIdx.z*q_heads*stride_scores;
@@ -272,11 +277,12 @@ template<int HPT> __device__ void split_scores_shared(const float* q,const float
         for(unsigned int k=0;k<16;++k){const unsigned int c=lane+k*32;qr[h][k]=c<width?q[(unsigned long long)(head0+h)*width+c]:0.0f;}
     }
     const float* kb=keys+(unsigned long long)kv*width;
+    unsigned int slot=(start+first)%ring;
     for(unsigned int i=first;i<n;i+=step){
-        const unsigned long long t=start+i;
         float ka[16];
         #pragma unroll
-        for(unsigned int k=0;k<16;++k){const unsigned int c=lane+k*32;ka[k]=c<width?kb[t*stride+c]:0.0f;}
+        for(unsigned int k=0;k<16;++k){const unsigned int c=lane+k*32;ka[k]=c<width?kb[(unsigned long long)slot*stride+c]:0.0f;}
+        slot+=step;if(slot>=ring)slot%=ring;
         #pragma unroll
         for(int h=0;h<HPT;++h){
             float pa[8]={0.0f};
@@ -288,8 +294,8 @@ template<int HPT> __device__ void split_scores_shared(const float* q,const float
         }
     }
 }
-#define SPLIT_SCORES_ARGS const float* q,const float* keys,float* scores,unsigned int width,unsigned int q_heads,unsigned int kv_heads,unsigned int tokens,unsigned int position,unsigned int window,float scale,unsigned int stride_scores,const unsigned int* state
-#define SPLIT_SCORES_PASS q,keys,scores,width,q_heads,kv_heads,tokens,position,window,scale,stride_scores,state
+#define SPLIT_SCORES_ARGS const float* q,const float* keys,float* scores,unsigned int width,unsigned int q_heads,unsigned int kv_heads,unsigned int tokens,unsigned int position,unsigned int window,float scale,unsigned int stride_scores,const unsigned int* state,unsigned int ring
+#define SPLIT_SCORES_PASS q,keys,scores,width,q_heads,kv_heads,tokens,position,window,scale,stride_scores,state,ring
 extern "C" __global__ void attention_split_scores_h2(SPLIT_SCORES_ARGS){split_scores_shared<2>(SPLIT_SCORES_PASS);}
 extern "C" __global__ void attention_split_scores_h4(SPLIT_SCORES_ARGS){split_scores_shared<4>(SPLIT_SCORES_PASS);}
 extern "C" __global__ void attention_split_scores_h8(SPLIT_SCORES_ARGS){split_scores_shared<8>(SPLIT_SCORES_PASS);}
@@ -308,7 +314,7 @@ __device__ __forceinline__ void cp_async_commit(){asm volatile("cp.async.commit_
 template<int N> __device__ __forceinline__ void cp_async_wait(){asm volatile("cp.async.wait_group %0;\n" :: "n"(N));}
 template<int HPT,int T=128,int S=2> __device__ __forceinline__ void split_values_async_impl(const float* scores,const float* values,float* output,
     unsigned int width,unsigned int q_heads,unsigned int kv_heads,unsigned int tokens,unsigned int position,
-    unsigned int window,unsigned int stride_scores,const unsigned int* state){
+    unsigned int window,unsigned int stride_scores,const unsigned int* state,unsigned int ring){
     if(state){tokens=state[1]+1;position=state[1];}
     position+=blockIdx.z;
     scores+=(unsigned long long)blockIdx.z*q_heads*stride_scores;
@@ -319,15 +325,16 @@ template<int HPT,int T=128,int S=2> __device__ __forceinline__ void split_values
     const unsigned int kv=head0/(q_heads/kv_heads),n=end-start,tiles=(n+T-1)/T;
     const unsigned long long stride=(unsigned long long)kv_heads*width;
     const float* p=scores+(unsigned long long)head0*stride_scores;
-    const float* vbase=values+(unsigned long long)kv*width+c0+(unsigned long long)start*stride;
+    const float* vbase=values+(unsigned long long)kv*width+c0;
     __shared__ __align__(16) float vs[S][T][32];
     __shared__ __align__(16) float ps[S][HPT][T];
     auto issue=[&](unsigned int tile){
-        const unsigned int stage=tile%S,base=tile*T;
+        const unsigned int stage=tile%S,base=tile*T,base_slot=(start+base)%ring;
         for(unsigned int i=threadIdx.x;i<T*8;i+=128){
             const unsigned int t=i/8,q=i%8;
             const bool ok=base+t<n;
-            cp_async16(&vs[stage][t][q*4],vbase+(ok?(unsigned long long)(base+t)*stride:0)+q*4,ok?16u:0u);
+            unsigned int sl=base_slot+t;if(sl>=ring)sl%=ring;
+            cp_async16(&vs[stage][t][q*4],vbase+(ok?(unsigned long long)sl*stride:0)+q*4,ok?16u:0u);
         }
         for(unsigned int i=threadIdx.x;i<HPT*(T/4);i+=128){
             const unsigned int h=i/(T/4),t=(i%(T/4))*4;

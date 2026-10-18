@@ -10,6 +10,8 @@ pub(crate) struct ResidentKv<'a> {
     pub values: &'a CudaSlice<f32>,
     pub tokens: u32,
     pub layout: KvLayout,
+    /// Physical slots: token t is stored in slot t % ring.
+    pub ring: u32,
 }
 pub(crate) struct KvCache {
     layout: KvLayout,
@@ -17,15 +19,29 @@ pub(crate) struct KvCache {
     stream: Arc<CudaStream>,
     keys: CudaSlice<f32>,
     values: CudaSlice<f32>,
+    /// Physical slots (<= logical capacity). Token t lives in slot t % ring.
+    ring: u32,
     poisoned: bool,
 }
 impl KvCache {
     pub(crate) fn new(stream: Arc<CudaStream>, layout: KvLayout) -> Result<Self, DiagnosticError> {
+        Self::with_ring(stream, layout, layout.capacity())
+    }
+    /// Circular cache for sliding-window layers: only `ring` token slots are
+    /// allocated. The caller must keep ring >= window + (largest batch - 1)
+    /// so that no write ever overwrites a token that is still visible.
+    pub(crate) fn with_ring(
+        stream: Arc<CudaStream>,
+        layout: KvLayout,
+        ring: u32,
+    ) -> Result<Self, DiagnosticError> {
+        let ring = ring.clamp(1, layout.capacity());
+        let elements = ring as usize * layout.token_elements();
         let keys = stream
-            .alloc_zeros::<f32>(layout.elements())
+            .alloc_zeros::<f32>(elements)
             .map_err(|e| failure("Allocation cache K", e))?;
         let values = stream
-            .alloc_zeros::<f32>(layout.elements())
+            .alloc_zeros::<f32>(elements)
             .map_err(|e| failure("Allocation cache V", e))?;
         Ok(Self {
             layout,
@@ -33,8 +49,12 @@ impl KvCache {
             stream,
             keys,
             values,
+            ring,
             poisoned: false,
         })
+    }
+    pub(crate) fn ring(&self) -> u32 {
+        self.ring
     }
     pub(crate) fn graph_buffers(
         &mut self,
@@ -69,12 +89,24 @@ impl KvCache {
         }
         let tokens = u32::try_from(keys.len() / token_elements)
             .map_err(|_| DiagnosticError("Ajout KV trop grand".into()))?;
-        let range = self.state.append_range(tokens).map_err(DiagnosticError)?;
-        let copy = || {
-            self.stream
-                .memcpy_dtod(keys, &mut self.keys.slice_mut(range.clone()))?;
-            self.stream
-                .memcpy_dtod(values, &mut self.values.slice_mut(range))
+        self.state.append_range(tokens).map_err(DiagnosticError)?;
+        let start = self.state.len();
+        let ring = self.ring;
+        let mut copy = || {
+            // One copy per token: slots wrap around the ring.
+            for t in 0..tokens as usize {
+                let slot = ((start as usize + t) % ring as usize) * token_elements;
+                let src = t * token_elements..(t + 1) * token_elements;
+                self.stream.memcpy_dtod(
+                    &keys.slice(src.clone()),
+                    &mut self.keys.slice_mut(slot..slot + token_elements),
+                )?;
+                self.stream.memcpy_dtod(
+                    &values.slice(src),
+                    &mut self.values.slice_mut(slot..slot + token_elements),
+                )?;
+            }
+            Ok::<(), cudarc::driver::DriverError>(())
         };
         if let Err(e) = copy() {
             self.poisoned = true;
@@ -89,6 +121,7 @@ impl KvCache {
             values: &self.values,
             tokens: self.state.len(),
             layout: self.layout,
+            ring: self.ring,
         })
     }
     fn ensure_valid(&self) -> Result<(), DiagnosticError> {
@@ -122,7 +155,8 @@ impl KvCache {
     /// Diagnostic seulement. Le moteur utilisera les données résidentes.
     pub(crate) fn snapshot(&self) -> Result<(Vec<f32>, Vec<f32>), DiagnosticError> {
         self.ensure_valid()?;
-        let end = self.state.len() as usize * self.layout.token_elements();
+        // Physical contents (slot order) of the occupied slots.
+        let end = self.state.len().min(self.ring) as usize * self.layout.token_elements();
         if end == 0 {
             return Ok((Vec::new(), Vec::new()));
         }

@@ -89,6 +89,19 @@ impl ResidentLayer {
     ) -> Result<Self, DiagnosticError> {
         let width = w.matrices[0].columns();
         validate(w, width, tokens)?;
+        // Sliding-window layers keep a circular K/V cache of window + one
+        // largest batch (so no write overwrites a token still visible). Only
+        // the split attention kernels understand the ring.
+        let attention = AttentionKernel::new(stream.clone(), w.attention)?;
+        let ring = match w.attention.window() {
+            Some(window)
+                if attention.supports_batch()
+                    && std::env::var("ADAFORGE_KV_RING").as_deref() != Ok("0") =>
+            {
+                (window + super::batch::MAX_BATCH as u32).min(tokens)
+            }
+            _ => tokens,
+        };
         let source = format!(
             "{}\n{}\n{}",
             include_str!("../../../kernels/ada/rms_norm.cu"),
@@ -192,12 +205,13 @@ impl ResidentLayer {
             next_position: 0,
             capacity: tokens,
             poisoned: false,
-            cache: KvCache::new(
+            cache: KvCache::with_ring(
                 stream.clone(),
                 KvLayout::new(tokens, w.attention.kv_heads(), w.rope.width())
                     .map_err(DiagnosticError)?,
+                ring,
             )?,
-            attention: AttentionKernel::new(stream.clone(), w.attention)?,
+            attention,
             output_branch: OutputKernel::new(stream.clone(), w.output)?,
             ffn: FfnKernel::new(stream.clone(), w.ffn)?,
             stream,
@@ -326,6 +340,7 @@ impl ResidentLayer {
             let vsource = if self.shared_kv != 0 { 1 } else { 2 };
             let (qout, kout) = self.rotated.split_at_mut(1);
             let into_cache = self.prep_cache && state.is_some();
+            let ring = self.cache.ring();
             let (keyout, valueout) = if into_cache {
                 self.cache.graph_buffers()?
             } else {
@@ -359,6 +374,9 @@ impl ResidentLayer {
                 launch.arg(state);
             } else {
                 launch.arg(&position);
+            }
+            if into_cache {
+                launch.arg(&ring);
             }
             // SAFETY: validated heads of width 256/512, one 256-thread block per Q/K/V head, disjoint outputs; shared K/V uses a read-only alias.
             unsafe {
@@ -443,6 +461,7 @@ impl ResidentLayer {
         }
         if let Some(state) = state {
             if !(self.prep_cache && self.grouped_qkv_prep) {
+                let ring = self.cache.ring();
                 let (keys, values) = self.cache.graph_buffers()?;
                 let elements = self.rows[1];
                 let mut launch = self.stream.launch_builder(&self.cache_dynamic);
@@ -452,7 +471,8 @@ impl ResidentLayer {
                     .arg(keys)
                     .arg(values)
                     .arg(&elements)
-                    .arg(state);
+                    .arg(state)
+                    .arg(&ring);
                 // SAFETY: graph state position checked against capacity before launch; distinct cache buffers.
                 unsafe {
                     launch.launch(LaunchConfig {
@@ -506,6 +526,7 @@ impl ResidentLayer {
             let qheads = self.rows[0] / self.head_width;
             let kvheads = self.rows[1] / self.head_width;
             let vsource = if self.shared_kv != 0 { 1 } else { 2 };
+            let ring = self.cache.ring();
             let (keys, values) = self.cache.graph_buffers()?;
             let mut launch = self.stream.launch_builder(&self.prepare_qkv_batch);
             launch
@@ -525,7 +546,8 @@ impl ResidentLayer {
                 .arg(&self.eps[1])
                 .arg(&self.eps[2])
                 .arg(&self.eps[3])
-                .arg(&start);
+                .arg(&start)
+                .arg(&ring);
             // SAFETY: start + n <= capacity (checked above), raw/queries hold n rows,
             // one 256-thread block per (head, token), disjoint outputs.
             unsafe {
@@ -1635,7 +1657,8 @@ mod tests {
                             .arg(&eps)
                             .arg(&eps)
                             .arg(&eps)
-                            .arg(&state);
+                            .arg(&state)
+                            .arg(&u32::MAX);
                         // SAFETY: cache has position+2 complete slots; read-only aliases and disjoint outputs; one block per supported head.
                         unsafe {
                             launch.launch(LaunchConfig {

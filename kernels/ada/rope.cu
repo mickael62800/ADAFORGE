@@ -20,9 +20,9 @@ __device__ __forceinline__ void rope_impl(const float* input, const double* inv_
 
 extern "C" __global__ void rope_neox(const float* input,const double* freq,float* output,unsigned int width,unsigned int elements,unsigned int position){rope_impl(input,freq,output,width,elements,position);}
 extern "C" __global__ void rope_dynamic(const float* input,const double* freq,float* output,unsigned int width,unsigned int elements,const unsigned int* state){rope_impl(input,freq,output,width,elements,state[1]);}
-extern "C" __global__ void cache_dynamic(const float* key,const float* value,float* keys,float* values,unsigned int elements,const unsigned int* state){
+extern "C" __global__ void cache_dynamic(const float* key,const float* value,float* keys,float* values,unsigned int elements,const unsigned int* state,unsigned int ring){
     unsigned int c=blockIdx.x*blockDim.x+threadIdx.x;if(c>=elements)return;
-    unsigned long long offset=(unsigned long long)state[1]*elements+c;keys[offset]=key[c];values[offset]=value[c];
+    unsigned long long offset=(unsigned long long)(state[1]%ring)*elements+c;keys[offset]=key[c];values[offset]=value[c];
 }
 
 // One block per head; identical RMS reduction and an explicit FP32 boundary
@@ -73,17 +73,17 @@ extern "C" __global__ void prepare_qkv(const float* q,const float* k,const float
 extern "C" __global__ void prepare_qkv_dynamic(const float* q,const float* k,const float* v,const float* qw,const float* kw,const float* vw,const double* freq,float* qo,float* ko,float* vo,unsigned int width,unsigned int qheads,unsigned int kvheads,float qe,float ke,float ve,const unsigned int* state){prepare_qkv_impl(q,k,v,qw,kw,vw,freq,qo,ko,vo,width,qheads,kvheads,qe,ke,ve,state[1]);}
 
 // Graph-only: write prepared K/V straight into the current cache slot.
-extern "C" __global__ void prepare_qkv_cache_dynamic(const float* q,const float* k,const float* v,const float* qw,const float* kw,const float* vw,const double* freq,float* qo,float* keys,float* values,unsigned int width,unsigned int qheads,unsigned int kvheads,float qe,float ke,float ve,const unsigned int* state){
-    unsigned long long offset=(unsigned long long)state[1]*kvheads*width;
+extern "C" __global__ void prepare_qkv_cache_dynamic(const float* q,const float* k,const float* v,const float* qw,const float* kw,const float* vw,const double* freq,float* qo,float* keys,float* values,unsigned int width,unsigned int qheads,unsigned int kvheads,float qe,float ke,float ve,const unsigned int* state,unsigned int ring){
+    unsigned long long offset=(unsigned long long)(state[1]%ring)*kvheads*width;
     prepare_qkv_impl(q,k,v,qw,kw,vw,freq,qo,keys+offset,values+offset,width,qheads,kvheads,qe,ke,ve,state[1]);
 }
 
 // Batched prefill: blockIdx.y = token t of the batch (position start+t).
 // Inputs are [n][rows]; Q goes to qo[t], K/V straight into the cache slot.
 // Per (head, token) this is prepare_qkv_impl unchanged: bit-identical.
-extern "C" __global__ void prepare_qkv_batch(const float* q,const float* k,const float* v,const float* qw,const float* kw,const float* vw,const double* freq,float* qo,float* keys,float* values,unsigned int width,unsigned int qheads,unsigned int kvheads,float qe,float ke,float ve,unsigned int start){
+extern "C" __global__ void prepare_qkv_batch(const float* q,const float* k,const float* v,const float* qw,const float* kw,const float* vw,const double* freq,float* qo,float* keys,float* values,unsigned int width,unsigned int qheads,unsigned int kvheads,float qe,float ke,float ve,unsigned int start,unsigned int ring){
     const unsigned int t=blockIdx.y;
     const unsigned long long qrows=(unsigned long long)qheads*width,kvrows=(unsigned long long)kvheads*width;
-    const unsigned long long slot=(unsigned long long)(start+t)*kvrows;
+    const unsigned long long slot=(unsigned long long)((start+t)%ring)*kvrows;
     prepare_qkv_impl(q+t*qrows,k+t*kvrows,v+t*kvrows,qw,kw,vw,freq,qo+t*qrows,keys+slot,values+slot,width,qheads,kvheads,qe,ke,ve,start+t);
 }

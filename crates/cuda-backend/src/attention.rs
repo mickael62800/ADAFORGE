@@ -112,6 +112,7 @@ impl AttentionKernel {
             values,
             tokens,
             layout,
+            ring,
         } = cache.resident()?;
         let c = self.config;
         if tokens > super::stack::MAX_CONTEXT
@@ -128,7 +129,7 @@ impl AttentionKernel {
         let range = c.visible_range(tokens, position).map_err(DiagnosticError)?;
         if self.split.is_some() {
             let blocks = (range.len() as u32).div_ceil(16).clamp(1, 32);
-            return self.launch_split(query, keys, values, tokens, position, None, blocks);
+            return self.launch_split(query, keys, values, tokens, position, None, blocks, ring);
         }
         let width = c.width();
         let q_heads = c.q_heads();
@@ -170,6 +171,7 @@ impl AttentionKernel {
         position: u32,
         state: Option<&CudaSlice<u32>>,
         score_blocks: u32,
+        ring: u32,
     ) -> Result<(), DiagnosticError> {
         let split = self.split.as_mut().expect("split attention");
         Self::launch_split_into(
@@ -186,6 +188,7 @@ impl AttentionKernel {
             state,
             score_blocks,
             1,
+            ring,
         )
     }
     /// Batched prefill attention: `queries` holds n rotated Q vectors for
@@ -230,6 +233,7 @@ impl AttentionKernel {
             None,
             blocks,
             n,
+            data.ring,
         )
     }
     pub(crate) fn supports_batch(&self) -> bool {
@@ -250,6 +254,7 @@ impl AttentionKernel {
         state: Option<&CudaSlice<u32>>,
         score_blocks: u32,
         queries: u32,
+        ring: u32,
     ) -> Result<(), DiagnosticError> {
         let scores: &mut CudaSlice<f32> = match scores_override {
             Some(s) => s,
@@ -272,6 +277,7 @@ impl AttentionKernel {
             Some(st) => l.arg(st),
             None => l.arg(&null),
         };
+        l.arg(&ring);
         // SAFETY: validated geometry (width <= 512), visible tokens <= MAX_CONTEXT
         // scores per head; blocks past the visible range return immediately.
         unsafe { l.launch(cfg(qheads / split.heads_per_warp, score_blocks, 256)) }
@@ -282,6 +288,7 @@ impl AttentionKernel {
             Some(st) => l.arg(st),
             None => l.arg(&null),
         };
+        l.arg(&ring);
         // SAFETY: one 256-thread block per head over its own score row.
         unsafe { l.launch(cfg(qheads, 1, 256)) }.map_err(|e| failure("Softmax attention", e))?;
         let mut l = stream.launch_builder(&split.values_fn);
@@ -291,6 +298,7 @@ impl AttentionKernel {
             Some(st) => l.arg(st),
             None => l.arg(&null),
         };
+        l.arg(&ring);
         let values_cfg = if split.values_async {
             cfg(qheads, width / 32, 128)
         } else {
@@ -313,7 +321,7 @@ impl AttentionKernel {
         let data = cache.resident()?;
         if self.split.is_some() {
             let blocks = capacity.div_ceil(16).clamp(1, 32);
-            return self.launch_split(query, data.keys, data.values, 0, 0, Some(state), blocks);
+            return self.launch_split(query, data.keys, data.values, 0, 0, Some(state), blocks, data.ring);
         }
         let c = self.config;
         let width = c.width();
@@ -594,16 +602,16 @@ mod reference_bits {
                         let scf = match hs { 4 => &sc4, 2 => &sc2, _ => &sc };
                         let mut l = stream.launch_builder(scf);
                         l.arg(&q).arg(&k).arg(&mut scores).arg(&width).arg(&qheads).arg(&kvheads)
-                            .arg(&tokens).arg(&position).arg(&window).arg(&scale).arg(&stride).arg(&null);
+                            .arg(&tokens).arg(&position).arg(&window).arg(&scale).arg(&stride).arg(&null).arg(&u32::MAX);
                         // SAFETY: scores hold qheads*stride floats; visible tokens <= stride.
                         unsafe { l.launch(cfg(qheads / hs, 7, 256)) }.unwrap();
                         let mut l = stream.launch_builder(&sm);
-                        l.arg(&mut scores).arg(&tokens).arg(&position).arg(&window).arg(&stride).arg(&null);
+                        l.arg(&mut scores).arg(&tokens).arg(&position).arg(&window).arg(&stride).arg(&null).arg(&u32::MAX);
                         // SAFETY: one block per head row.
                         unsafe { l.launch(cfg(qheads, 1, 256)) }.unwrap();
                         let mut l = stream.launch_builder(&sv);
                         l.arg(&scores).arg(&v).arg(&mut out).arg(&width).arg(&qheads).arg(&kvheads)
-                            .arg(&tokens).arg(&position).arg(&window).arg(&stride).arg(&null);
+                            .arg(&tokens).arg(&position).arg(&window).arg(&stride).arg(&null).arg(&u32::MAX);
                         // SAFETY: one thread per (head, channel).
                         unsafe { l.launch(cfg(qheads, width.div_ceil(64), 64)) }.unwrap();
                         let c = stream.clone_dtoh(&out).unwrap();
@@ -616,7 +624,7 @@ mod reference_bits {
                         let svf = match hv { 4 => &sva4, 2 => &sva2, _ => &sva };
                         let mut l = stream.launch_builder(svf);
                         l.arg(&scores).arg(&v).arg(&mut out2).arg(&width).arg(&qheads).arg(&kvheads)
-                            .arg(&tokens).arg(&position).arg(&window).arg(&stride).arg(&null);
+                            .arg(&tokens).arg(&position).arg(&window).arg(&stride).arg(&null).arg(&u32::MAX);
                         // SAFETY: one CTA per (head, 32 channels); scores rows aligned to 4.
                         unsafe { l.launch(cfg(qheads / hv, width.div_ceil(32), 128)) }.unwrap();
                         let c2 = stream.clone_dtoh(&out2).unwrap();
@@ -624,6 +632,46 @@ mod reference_bits {
                             c2.iter().zip(&b).all(|(x, y)| x.to_bits() == y.to_bits()),
                             "async values: width {width} tokens {tokens} window {window}"
                         );
+                        // Circular cache: same tokens stored in slot t % ring, with the
+                        // ring already wrapped several times; results must not change.
+                        if window > 0 && tokens > window + 5 {
+                            let ring = window + 5;
+                            let row = (kvheads * width) as usize;
+                            let (host_k, host_v) = (stream.clone_dtoh(&k).unwrap(), stream.clone_dtoh(&v).unwrap());
+                            let (mut rk, mut rv) = (vec![0f32; ring as usize * row], vec![0f32; ring as usize * row]);
+                            for t in 0..tokens as usize {
+                                let slot = (t % ring as usize) * row;
+                                rk[slot..slot + row].copy_from_slice(&host_k[t * row..(t + 1) * row]);
+                                rv[slot..slot + row].copy_from_slice(&host_v[t * row..(t + 1) * row]);
+                            }
+                            let (rk, rv) = (stream.clone_htod(&rk).unwrap(), stream.clone_htod(&rv).unwrap());
+                            let mut l = stream.launch_builder(scf);
+                            l.arg(&q).arg(&rk).arg(&mut scores).arg(&width).arg(&qheads).arg(&kvheads)
+                                .arg(&tokens).arg(&position).arg(&window).arg(&scale).arg(&stride).arg(&null).arg(&ring);
+                            // SAFETY: ring buffers hold `ring` complete token rows; visible window < ring.
+                            unsafe { l.launch(cfg(qheads / hs, 7, 256)) }.unwrap();
+                            let mut l = stream.launch_builder(&sm);
+                            l.arg(&mut scores).arg(&tokens).arg(&position).arg(&window).arg(&stride).arg(&null).arg(&ring);
+                            // SAFETY: one block per head row.
+                            unsafe { l.launch(cfg(qheads, 1, 256)) }.unwrap();
+                            for (f, threads, groups) in [(svf, 128u32, qheads / hv), (&sv, 64, qheads)] {
+                                if threads == 128 && width % 32 != 0 {
+                                    continue;
+                                }
+                                let mut o = stream.alloc_zeros::<f32>((qheads * width) as usize).unwrap();
+                                let mut l = stream.launch_builder(f);
+                                l.arg(&scores).arg(&rv).arg(&mut o).arg(&width).arg(&qheads).arg(&kvheads)
+                                    .arg(&tokens).arg(&position).arg(&window).arg(&stride).arg(&null).arg(&ring);
+                                let y = if threads == 128 { width / 32 } else { width.div_ceil(64) };
+                                // SAFETY: ring buffers sized above; one CTA per (head group, channels).
+                                unsafe { l.launch(cfg(groups, y, threads)) }.unwrap();
+                                let r = stream.clone_dtoh(&o).unwrap();
+                                assert!(
+                                    r.iter().zip(&b).all(|(x, y)| x.to_bits() == y.to_bits()),
+                                    "ring {ring} values ({threads}): width {width} tokens {tokens} window {window}"
+                                );
+                            }
+                        }
                     }
                 }
             }
@@ -665,7 +713,7 @@ mod split_timing {
                     let e0 = stream.record_event(Some(sys::CUevent_flags::CU_EVENT_DEFAULT)).unwrap();
                     let mut l = stream.launch_builder(&f[fi]);
                     l.arg(&q).arg(&k).arg(&mut scores).arg(&width).arg(&qheads).arg(&kvheads)
-                        .arg(&tokens).arg(&position).arg(&window).arg(&scale).arg(&stride).arg(&null);
+                        .arg(&tokens).arg(&position).arg(&window).arg(&scale).arg(&stride).arg(&null).arg(&u32::MAX);
                     // SAFETY: buffers sized above.
                     unsafe { l.launch(cfg(qheads / hs, 32, 256)) }.unwrap();
                     let e1 = stream.record_event(Some(sys::CUevent_flags::CU_EVENT_DEFAULT)).unwrap();
@@ -679,12 +727,12 @@ mod split_timing {
                 let e0 = e(&stream);
                 let mut l = stream.launch_builder(&f[0]);
                 l.arg(&q).arg(&k).arg(&mut scores).arg(&width).arg(&qheads).arg(&kvheads)
-                    .arg(&tokens).arg(&position).arg(&window).arg(&scale).arg(&stride).arg(&null);
+                    .arg(&tokens).arg(&position).arg(&window).arg(&scale).arg(&stride).arg(&null).arg(&u32::MAX);
                 // SAFETY: buffers sized above.
                 unsafe { l.launch(cfg(qheads, 32, 256)) }.unwrap();
                 let e1 = e(&stream);
                 let mut l = stream.launch_builder(&f[1]);
-                l.arg(&mut scores).arg(&tokens).arg(&position).arg(&window).arg(&stride).arg(&null);
+                l.arg(&mut scores).arg(&tokens).arg(&position).arg(&window).arg(&stride).arg(&null).arg(&u32::MAX);
                 // SAFETY: one block per head row.
                 unsafe { l.launch(cfg(qheads, 1, 256)) }.unwrap();
                 let e2 = e(&stream);
@@ -692,7 +740,7 @@ mod split_timing {
                 let vf = &f[match hpt { 1 => 2, 2 => 3, _ => 4 }];
                 let mut l = stream.launch_builder(vf);
                 l.arg(&scores).arg(&v).arg(&mut out).arg(&width).arg(&qheads).arg(&kvheads)
-                    .arg(&tokens).arg(&position).arg(&window).arg(&stride).arg(&null);
+                    .arg(&tokens).arg(&position).arg(&window).arg(&stride).arg(&null).arg(&u32::MAX);
                 // SAFETY: one thread per (head group, channel).
                 unsafe { l.launch(cfg(qheads / hpt, width.div_ceil(64), 64)) }.unwrap();
                 let e3 = e(&stream);
@@ -706,7 +754,7 @@ mod split_timing {
                 let hv = (qheads / kvheads).min(4);
                 let mut l = stream.launch_builder(&f[match hv { 4 => 10, 2 => 9, _ => 8 }]);
                 l.arg(&scores).arg(&v).arg(&mut out).arg(&width).arg(&qheads).arg(&kvheads)
-                    .arg(&tokens).arg(&position).arg(&window).arg(&stride).arg(&null);
+                    .arg(&tokens).arg(&position).arg(&window).arg(&stride).arg(&null).arg(&u32::MAX);
                 // SAFETY: one CTA per (head group, 32 channels).
                 unsafe { l.launch(cfg(qheads / hv, width.div_ceil(32), 128)) }.unwrap();
                 let e1 = stream.record_event(Some(sys::CUevent_flags::CU_EVENT_DEFAULT)).unwrap();
