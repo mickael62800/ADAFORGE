@@ -7,7 +7,7 @@ use cudarc::driver::{CudaFunction, CudaSlice, CudaStream, LaunchConfig, PushKern
 use cudarc::nvrtc::{CompileOptions, compile_ptx_with_opts};
 use std::sync::Arc;
 
-pub(crate) const MAX_BATCH: usize = 16;
+pub(crate) const MAX_BATCH: usize = 32;
 /// Longest speculative verification batch (the batched head stops at 8).
 pub(crate) const MAX_VERIFY: usize = 8;
 /// Above this many tokens, the 4-warp kernels (tiled gate, k-parallel) spill
@@ -69,7 +69,7 @@ impl BatchKernels {
                 .map_err(|e| failure("Kernel lots", e))
         };
         let family = |prefix: &str| {
-            (1..=MAX_BATCH)
+            (1..=16)
                 .map(|b| load(&format!("{prefix}{b}")))
                 .collect::<Result<Vec<_>, _>>()
         };
@@ -121,7 +121,7 @@ impl BatchKernels {
             return Err(DiagnosticError("Matvec lot invalide".into()));
         }
         let cfg = grid(if kparallel { rows } else { rows.div_ceil(4) }, 128);
-        let chunk = if kparallel { SPLIT_ABOVE } else { n };
+        let chunk = if kparallel { SPLIT_ABOVE } else { n.min(16) };
         let mut first = 0;
         while first < n {
             let m = chunk.min(n - first);
