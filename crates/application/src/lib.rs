@@ -1111,5 +1111,24 @@ pub trait GenerationSession {
         max_new: u32,
     ) -> Result<GenerationTokens, DiagnosticError>;
     fn reset(&mut self) -> Result<(), DiagnosticError>;
+    /// Teacher-forced scoring (validation of approximate kernels): after the
+    /// prompt, feeds `continuation` token by token and returns, for every
+    /// next-token prediction, the log-normalizer of the softcapped logits and
+    /// the `top_k` best (id, softcapped logit). Leaves the session reset.
+    fn score(
+        &mut self,
+        _prompt: &[u32],
+        _continuation: &[u32],
+        _top_k: usize,
+    ) -> Result<Vec<ScoredPosition>, DiagnosticError> {
+        Err(DiagnosticError("Scoring non disponible pour ce backend".into()))
+    }
+}
+/// One teacher-forced prediction: log-sum-exp of all softcapped logits and
+/// the best (id, softcapped logit) pairs, highest first.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ScoredPosition {
+    pub log_normalizer: f64,
+    pub top: Vec<(u32, f32)>,
 }
 pub use stack::{CHAT_CONTEXT, ChatSession, open_chat};

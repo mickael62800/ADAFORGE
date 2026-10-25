@@ -1392,6 +1392,63 @@ impl CudaGenerationSession {
     }
 }
 impl adaforge_application::GenerationSession for CudaGenerationSession {
+    fn score(
+        &mut self,
+        prompt: &[u32],
+        continuation: &[u32],
+        top_k: usize,
+    ) -> Result<Vec<adaforge_application::ScoredPosition>, DiagnosticError> {
+        if prompt.is_empty()
+            || continuation.is_empty()
+            || prompt.len() + continuation.len() > self.capacity as usize
+            || prompt.iter().chain(continuation).any(|&id| id >= self.vocabulary)
+            || !self.cached.is_empty()
+        {
+            return Err(DiagnosticError("Séquence de scoring invalide".into()));
+        }
+        self.poisoned = true;
+        // Prompt: same prefill path as generation.
+        if self.batch.is_some() {
+            for chunk in prompt.chunks(super::batch::MAX_BATCH) {
+                if chunk.len() == 1 {
+                    self.consume(chunk[0])?;
+                } else {
+                    self.consume_batch(chunk)?;
+                }
+            }
+        } else {
+            for &id in prompt {
+                self.consume(id)?;
+            }
+        }
+        let cap = self.head.cap();
+        let mut scored = Vec::with_capacity(continuation.len());
+        for (i, &id) in continuation.iter().enumerate() {
+            let raw = self
+                .head
+                .logits(self.layers.last().expect("48 layers").output())?;
+            let capped: Vec<f32> = raw.iter().map(|&l| (l / cap).tanh() * cap).collect();
+            let max = capped.iter().copied().fold(f32::MIN, f32::max) as f64;
+            let log_normalizer =
+                max + capped.iter().map(|&l| (l as f64 - max).exp()).sum::<f64>().ln();
+            let mut order: Vec<u32> = (0..capped.len() as u32).collect();
+            let k = top_k.min(order.len());
+            order.select_nth_unstable_by(k - 1, |&a, &b| {
+                capped[b as usize].total_cmp(&capped[a as usize])
+            });
+            let mut top: Vec<(u32, f32)> =
+                order[..k].iter().map(|&t| (t, capped[t as usize])).collect();
+            top.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
+            scored.push(adaforge_application::ScoredPosition { log_normalizer, top });
+            // Decode path (CUDA graph), exactly as generation feeds tokens.
+            if i + 1 < continuation.len() {
+                self.consume(id)?;
+            }
+        }
+        self.poisoned = false;
+        adaforge_application::GenerationSession::reset(self)?;
+        Ok(scored)
+    }
     fn generate(
         &mut self,
         prompt: &[u32],

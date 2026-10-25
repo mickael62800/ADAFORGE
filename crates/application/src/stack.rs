@@ -364,6 +364,19 @@ pub struct ChatSession {
     capacity: u32,
 }
 impl ChatSession {
+    /// See `GenerationSession::score`; clears the chat history.
+    pub fn score(
+        &mut self,
+        prompt: &[u32],
+        continuation: &[u32],
+        top_k: usize,
+    ) -> Result<Vec<crate::ScoredPosition>, DiagnosticError> {
+        self.history.clear();
+        self.backend.reset()?;
+        let result = self.backend.score(prompt, continuation, top_k);
+        self.backend.reset()?;
+        result
+    }
     pub fn send(&mut self, message: &str) -> Result<GenerationReport, DiagnosticError> {
         self.send_stream(message, &mut |_| {})
     }

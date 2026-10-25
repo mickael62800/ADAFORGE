@@ -247,6 +247,27 @@ pub fn run(
             }
             Ok(())
         }
+        [command,path,input,output] if command=="score" => {
+            // Input: one sequence per line, "prompt ids;continuation ids" (comma-separated).
+            // Output: per position "log_normalizer id:logit ...", blank line between sequences.
+            let text=std::fs::read_to_string(input).map_err(|e|format!("{input}: {e}"))?;
+            let parse=|part:&str|part.split(',').filter(|v|!v.trim().is_empty()).map(|v|v.trim().parse::<u32>().map_err(|_|format!("ID invalide : {v}"))).collect::<Result<Vec<_>,_>>();
+            let mut session=adaforge_application::open_chat(inspector,backend,std::path::Path::new(path),1).map_err(|e|e.to_string())?;
+            let mut out=String::new();
+            for (n,line) in text.lines().filter(|l|!l.trim().is_empty()).enumerate(){
+                let (prompt,continuation)=line.split_once(';').ok_or("Ligne sans ';'")?;
+                let scored=session.score(&parse(prompt)?,&parse(continuation)?,256).map_err(|e|e.to_string())?;
+                for position in scored{
+                    out.push_str(&format!("{:.6}",position.log_normalizer));
+                    for (id,logit) in position.top{out.push_str(&format!(" {id}:{logit:.6}"));}
+                    out.push('\n');
+                }
+                out.push('\n');
+                eprintln!("séquence {} évaluée",n+1);
+            }
+            std::fs::write(output,out).map_err(|e|format!("{output}: {e}"))?;
+            Ok(())
+        }
         [command,path] | [command,path,_] if command=="chat" => {
             let max_new=args.get(2).map(|v|v.parse::<u32>().map_err(|_|"Limite de tokens invalide".to_string())).transpose()?.unwrap_or(128);
             println!("Chargement d’AdaForge…");

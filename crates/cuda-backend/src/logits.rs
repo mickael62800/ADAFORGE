@@ -540,6 +540,21 @@ impl ResidentHead {
         }
         self.selection.select_many(raw, n)
     }
+    /// Raw (pre-softcap) logits for one hidden state, read back to the host.
+    pub(crate) fn logits(&mut self, input: &CudaSlice<f32>) -> Result<Vec<f32>, DiagnosticError> {
+        self.project_gpu(input)?;
+        let out = self
+            .stream
+            .clone_dtoh(&self.raw)
+            .map_err(|e| failure("Lecture logits", e))?;
+        self.stream
+            .synchronize()
+            .map_err(|e| failure("Synchronisation logits", e))?;
+        Ok(out)
+    }
+    pub(crate) fn cap(&self) -> f32 {
+        self.cap
+    }
     pub(crate) fn select(&mut self, input: &CudaSlice<f32>) -> Result<u32, DiagnosticError> {
         self.project_gpu(input)?;
         self.selection.select(&self.raw)
